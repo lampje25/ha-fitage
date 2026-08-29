@@ -1,4 +1,5 @@
-"""API client for Feelfit integration."""
+"""API client for the FITAGE integration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -27,13 +28,15 @@ from .const import (
     PUBLIC_KEY,
 )
 
-_LOGGER = logging.getLogger("custom_components.feelfit.api")
+_LOGGER = logging.getLogger("custom_components.fitage.api")
+
 
 class FeelfitApiError(Exception):
-    """Exception for Feelfit API errors."""
+    """Exception for FITAGE API errors."""
+
 
 class FeelfitApi:
-    """API client for Feelfit with incremental measurement fetching."""
+    """API client for FITAGE with incremental measurement fetching."""
 
     def __init__(self, hass: Any, session: ClientSession, email: str) -> None:
         """Initialize the API client."""
@@ -54,7 +57,7 @@ class FeelfitApi:
         return f"{API_BASE}{path}?{query}"
 
     async def async_login(self, password: str) -> dict[str, Any]:
-        """Authenticate with Feelfit API."""
+        """Authenticate with the FITAGE API."""
         encrypted_pw = await self.hass.async_add_executor_job(
             self._encrypt_password, password
         )
@@ -75,7 +78,7 @@ class FeelfitApi:
         except FeelfitApiError:
             raise
         except Exception as exc:
-            _LOGGER.exception("Error while calling Feelfit login endpoint")
+            _LOGGER.exception("Error while calling FITAGE login endpoint")
             raise FeelfitApiError(str(exc)) from exc
 
         if str(result.get("code")) not in ("200", "0"):
@@ -117,9 +120,7 @@ class FeelfitApi:
         timeout = ClientTimeout(total=15)
 
         try:
-            async with self._session.get(
-                url, headers=headers, timeout=timeout
-            ) as resp:
+            async with self._session.get(url, headers=headers, timeout=timeout) as resp:
                 text = await resp.text()
                 if resp.status != 200:
                     _LOGGER.error("GET %s returned %s: %s", url, resp.status, text)
@@ -175,21 +176,23 @@ class FeelfitApi:
 
                 if not primary_user.get("account_name"):
                     primary_user["account_name"] = (
-                        primary_user.get("nickname") or
-                        primary_user.get("name") or
-                        primary_user.get("username") or
-                        primary_user.get("email", "").split("@")[0] if primary_user.get("email") else None or
-                        "Profilo Primario"
+                        primary_user.get("nickname")
+                        or primary_user.get("name")
+                        or primary_user.get("username")
+                        or primary_user.get("email", "").split("@")[0]
+                        if primary_user.get("email")
+                        else "Profilo Primario"
                     )
-                _LOGGER.debug("Primary profile: user_id=%s, account_name=%s",
-                             primary_user.get("user_id"),
-                             primary_user.get("account_name"))
+                _LOGGER.debug(
+                    "Primary profile: user_id=%s, account_name=%s",
+                    primary_user.get("user_id"),
+                    primary_user.get("account_name"),
+                )
                 profiles.append(primary_user)
         except Exception as exc:
             _LOGGER.error("Failed to fetch primary user: %s", exc)
 
         try:
-
             sub_users_data = await self._get("/sub_users/list_sub_user")
 
             _LOGGER.debug("Sub users response: %s", sub_users_data)
@@ -197,10 +200,10 @@ class FeelfitApi:
             sub_users = []
             if isinstance(sub_users_data, dict):
                 sub_users = (
-                    sub_users_data.get("sub_users") or
-                    sub_users_data.get("data") or
-                    sub_users_data.get("users") or
-                    []
+                    sub_users_data.get("sub_users")
+                    or sub_users_data.get("data")
+                    or sub_users_data.get("users")
+                    or []
                 )
             elif isinstance(sub_users_data, list):
                 sub_users = sub_users_data
@@ -212,24 +215,29 @@ class FeelfitApi:
 
                 if not user.get("account_name"):
                     user["account_name"] = (
-                        user.get("nickname") or
-                        user.get("name") or
-                        user.get("username") or
-                        user.get("email", "").split("@")[0] if user.get("email") else None or
-                        f"Profilo {idx + 2}"
+                        user.get("nickname")
+                        or user.get("name")
+                        or user.get("username")
+                        or user.get("email", "").split("@")[0]
+                        if user.get("email")
+                        else f"Profilo {idx + 2}"
                     )
-                _LOGGER.debug("Sub user %d: user_id=%s, account_name=%s",
-                             idx + 1,
-                             user.get("user_id"),
-                             user.get("account_name"))
+                _LOGGER.debug(
+                    "Sub user %d: user_id=%s, account_name=%s",
+                    idx + 1,
+                    user.get("user_id"),
+                    user.get("account_name"),
+                )
                 profiles.append(user)
 
         except Exception as exc:
             _LOGGER.warning("Failed to fetch sub users (might not exist): %s", exc)
 
-        _LOGGER.info("Found %d profiles total: %s",
-                     len(profiles),
-                     [f"{p.get('account_name')} (id={p.get('user_id')})" for p in profiles])
+        _LOGGER.info(
+            "Found %d profiles total: %s",
+            len(profiles),
+            [f"{p.get('account_name')} (id={p.get('user_id')})" for p in profiles],
+        )
         return profiles
 
     async def async_get_last_measurements(
@@ -270,13 +278,12 @@ class FeelfitApi:
 
         if selected_profiles:
             profiles_to_fetch = [
-                p for p in all_profiles
-                if str(p.get("user_id")) in selected_profiles
+                p for p in all_profiles if str(p.get("user_id")) in selected_profiles
             ]
             _LOGGER.debug(
                 "Fetching %d of %d profiles based on selection",
                 len(profiles_to_fetch),
-                len(all_profiles)
+                len(all_profiles),
             )
         else:
             profiles_to_fetch = all_profiles
@@ -305,7 +312,9 @@ class FeelfitApi:
             else:
                 request_last_updated_at = 0
 
-            last_measurement_id = int(last_known_meta.get("last_measurement_id", 0) or 0)
+            last_measurement_id = int(
+                last_known_meta.get("last_measurement_id", 0) or 0
+            )
 
             _LOGGER.debug(
                 "Profile %s measurements fetch: last_known=%s primary_ts=%s request=%s measurement_id=%s",
@@ -333,8 +342,12 @@ class FeelfitApi:
 
             for idx, res in enumerate(results):
                 if isinstance(res, Exception):
-                    _LOGGER.error("Error fetching index %s for profile %s: %s",
-                                idx, profile.get("account_name"), res)
+                    _LOGGER.error(
+                        "Error fetching index %s for profile %s: %s",
+                        idx,
+                        profile.get("account_name"),
+                        res,
+                    )
                     continue
                 if idx == 0:
                     user_settings = res or {}
@@ -344,10 +357,14 @@ class FeelfitApi:
                     measurements_data = res or {}
 
             measurements_list = measurements_data.get("measurements") or []
-            if not measurements_list and primary_ts and primary_ts != last_known_updated_at:
+            if (
+                not measurements_list
+                and primary_ts
+                and primary_ts != last_known_updated_at
+            ):
                 _LOGGER.debug(
                     "Profile %s measurements empty, retrying with last_updated_at=0 as fallback",
-                    profile.get("account_name")
+                    profile.get("account_name"),
                 )
                 try:
                     fallback = await self.async_get_last_measurements(
@@ -356,33 +373,45 @@ class FeelfitApi:
                     measurements_data = fallback or {}
                     measurements_list = measurements_data.get("measurements") or []
                 except Exception as exc:
-                    _LOGGER.debug("Fallback measurements fetch failed for profile %s: %s",
-                                profile.get("account_name"), exc)
+                    _LOGGER.debug(
+                        "Fallback measurements fetch failed for profile %s: %s",
+                        profile.get("account_name"),
+                        exc,
+                    )
 
             try:
-                returned_last_updated_at = int(measurements_data.get("last_updated_at") or 0)
-                returned_last_measurement_id = measurements_data.get("last_measurement_id") or 0
+                returned_last_updated_at = int(
+                    measurements_data.get("last_updated_at") or 0
+                )
+                returned_last_measurement_id = (
+                    measurements_data.get("last_measurement_id") or 0
+                )
 
                 if profile_user_id not in self._last_measurements_meta:
                     self._last_measurements_meta[profile_user_id] = {}
 
                 if returned_last_updated_at:
-                    self._last_measurements_meta[profile_user_id]["last_updated_at"] = returned_last_updated_at
+                    self._last_measurements_meta[profile_user_id]["last_updated_at"] = (
+                        returned_last_updated_at
+                    )
                 if returned_last_measurement_id:
-                    self._last_measurements_meta[profile_user_id]["last_measurement_id"] = returned_last_measurement_id
+                    self._last_measurements_meta[profile_user_id][
+                        "last_measurement_id"
+                    ] = returned_last_measurement_id
 
-                _LOGGER.debug("Updated measurements meta for profile %s: %s",
-                            profile.get("account_name"),
-                            self._last_measurements_meta[profile_user_id])
+                _LOGGER.debug(
+                    "Updated measurements meta for profile %s: %s",
+                    profile.get("account_name"),
+                    self._last_measurements_meta[profile_user_id],
+                )
             except (ValueError, TypeError):
                 _LOGGER.debug(
                     "Could not update measurements meta for profile %s from response: %s",
                     profile.get("account_name"),
-                    measurements_data
+                    measurements_data,
                 )
 
             last_measurement = measurements_list[0] if measurements_list else None
-
             profile_data = {
                 "user_info": profile,
                 "user_settings": user_settings,
@@ -456,7 +485,11 @@ class FeelfitApi:
         primary_ts = 0
 
         try:
-            pu = primary_data.get("user_info") if isinstance(primary_data, dict) else None
+            pu = (
+                primary_data.get("user_info")
+                if isinstance(primary_data, dict)
+                else None
+            )
             if pu and pu.get("time_stamp"):
                 primary_ts = int(pu.get("time_stamp"))
             elif self.user_info and self.user_info.get("time_stamp"):
@@ -526,16 +559,25 @@ class FeelfitApi:
                 _LOGGER.debug("Fallback measurements fetch failed: %s", exc)
 
         try:
-            returned_last_updated_at = int(measurements_data.get("last_updated_at") or 0)
-            returned_last_measurement_id = measurements_data.get("last_measurement_id") or 0
+            returned_last_updated_at = int(
+                measurements_data.get("last_updated_at") or 0
+            )
+            returned_last_measurement_id = (
+                measurements_data.get("last_measurement_id") or 0
+            )
             if returned_last_updated_at:
-                self._last_measurements_meta["last_updated_at"] = returned_last_updated_at
+                self._last_measurements_meta["last_updated_at"] = (
+                    returned_last_updated_at
+                )
             if returned_last_measurement_id:
-                self._last_measurements_meta["last_measurement_id"] = returned_last_measurement_id
+                self._last_measurements_meta["last_measurement_id"] = (
+                    returned_last_measurement_id
+                )
             _LOGGER.debug("Updated measurements meta: %s", self._last_measurements_meta)
         except (ValueError, TypeError):
             _LOGGER.debug(
-                "Could not update measurements meta from response: %s", measurements_data
+                "Could not update measurements meta from response: %s",
+                measurements_data,
             )
 
         device_binds = device_binds_data.get("device_binds") or []

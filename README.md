@@ -1,96 +1,42 @@
-# Feelfit (Home Assistant Custom Integration)
+# FITAGE for Home Assistant
 
-Sync and monitor your **Feelfit body measurements** directly in Home Assistant.  
-This custom integration connects to **Feelfit Cloud** using your Feelfit account and retrieves **weight, fat mass, muscle, water and more**, exposing them as **sensor entities** in HA.
+FITAGE is a custom integration that brings body-composition measurements from the FITAGE cloud into Home Assistant. It connects to the FITAGE/QNClouds backend with your FITAGE account; no Bluetooth or BLE connection to the scale is required. You can continue using the official FITAGE app normally alongside this integration.
 
-[![Validate with HACS](https://img.shields.io/badge/HACS-validated-41BDF5)](https://hacs.xyz/)  
-[![hassfest](https://img.shields.io/badge/hassfest-passing-brightgreen)](https://developers.home-assistant.io/docs/creating_integration_manifest/)  
-[![MIT License](https://img.shields.io/badge/license-MIT-informational)](LICENSE.md)
+This is an independent community project. It is not an official integration and is not affiliated with or supported by FITAGE, QingNiu, or QNClouds.
 
-> ⚠️ This is a third-party project, not affiliated with Feelfit.
+## Available sensors
 
----
+Depending on the data returned for your profile and scale, the integration provides:
 
-## ✨ Features
+- Profile: account name, profile weight, height, birthday, and email
+- Goals: weight, body-fat, and water goals returned by the cloud API
+- Measurements: weight, BMI, body fat, body-fat mass, hydration, body-water mass, muscle percentage, muscle mass, muscle ratio, muscle storage capacity, protein percentage, protein mass, bone mass, bone ratio, fat-free weight, subcutaneous fat, visceral fat, BMR, metabolic age, health score, heart rate, timestamp, and body shape
+- FITAGE report values: muscle control, fat control, weight control, and recommended weight
+- Linked scale information
 
-- Login with your **Feelfit account (email/password)**.  
-- Automatic discovery of your **linked Feelfit smart scales**.  
-- Periodic cloud polling to retrieve:
-  - User profile data (weight, height, birthday, etc.)  
-  - Personal goals (weight, body fat, water, etc.)  
-  - Device info (model, brand, MAC, etc.)  
-  - Last body measurement (weight, body fat, muscle, water, bone mass, heart rate, etc.)  
-- Each value is exposed as a **sensor entity**.  
-- Coordinator-based architecture (auto-refresh every 30 seconds).  
+The report-control sensors reproduce the verified normal FITAGE calculation route (`mea_category = 0`). They are unavailable for unsupported measurement categories rather than using an unverified calculation.
 
----
+## Installation with HACS
 
-## 🔧 Installation
+1. Install [HACS](https://hacs.xyz/) if it is not already available.
+2. Open HACS in Home Assistant and select **Custom repositories** from the menu.
+3. Add `https://github.com/lampje25/ha-fitage` with category **Integration**.
+4. Find **FITAGE** in HACS and download it.
+5. Restart Home Assistant.
+6. Go to **Settings → Devices & services → Add integration**, search for **FITAGE**, and enter your FITAGE account credentials.
 
-### Option A — HACS (recommended)
-1. Make sure you have [HACS](https://hacs.xyz/) installed in Home Assistant.
-2. In Home Assistant: **HACS → Integrations → ⋮ (three dots) → Custom repositories**.  
-   Add `https://github.com/Sanji78/feelfit` as **Category: Integration**.
-3. Find **Feelfit** in HACS and click **Download**.
-4. **Restart** Home Assistant.
+## Manual installation
 
-### Option B — Manual
-1. Copy the folder `custom_components/feelfit` from this repository into your Home Assistant config folder:
-   - `<config>/custom_components/feelfit`
-2. **Restart** Home Assistant.
+Copy `custom_components/fitage` into the `custom_components` directory of your Home Assistant configuration, restart Home Assistant, and add **FITAGE** from **Settings → Devices & services**.
 
----
+## How it works
 
-## ⚙️ Configuration
+The integration polls the FITAGE/QNClouds API for linked profiles, goals, devices, and the latest measurement. The cloud connection requires internet access and valid FITAGE account credentials. No direct BLE communication is performed.
 
-### Step 1 — Add the Integration
-1. In Home Assistant go to: **Settings → Devices & Services → Add Integration**.  
-2. Search for **Feelfit**.  
-3. Enter your **Feelfit account email and password**.  
-4. On success, the integration will log in, store your access token and automatically fetch your profile, devices, goals, and last measurement.
+For troubleshooting, inspect Home Assistant logs for `custom_components.fitage`. Please avoid sharing credentials, authorization headers, tokens, account identifiers, email addresses, or device MAC addresses in issue reports.
 
----
+Issues can be reported at [lampje25/ha-fitage](https://github.com/lampje25/ha-fitage/issues).
 
-## 📋 Entities
+## Origin and license
 
-- **User profile sensors**
-  - `account_name`, `weight`, `height`, `birthday`, `email`
-- **Goals sensors**  
-  - `weight`, `bodyfat`, `water` (more goal types are dynamically added if present)
-- **Device sensors**  
-  - One for each linked Feelfit scale, with detailed attributes (MAC, brand, model, WiFi name, etc.)
-- **Last measurement sensors**
-  - Weight, Body Fat, BMI, BMR, Metabolic Age, Muscle, Protein, Subcutaneous Fat, Visceral Fat, Hydration, Bone Mass, Heart Rate, Score, Measurement Timestamp, Body Water Mass, Protein Mass, Body Fat Mass  
-
-All entities are automatically updated every 30 seconds via a shared coordinator.
-
----
-
-## 🧪 Supported versions
-- Home Assistant: **2024.8** or newer (earlier may work, untested).
-
----
-
-## 🐞 Troubleshooting
-- Check **Settings → System → Logs** for messages under `custom_components.feelfit`.  
-- If login fails, double-check your **email and password**.  
-- If no entities appear, try **removing and re-adding** the integration.
-
----
-
-## 🙌 Contributing
-PRs and issues are welcome. Please open an issue with logs if you hit a bug:  
-[GitHub Issues](https://github.com/Sanji78/feelfit/issues)
-
----
-
-## ❤️ Donate
-If this project helps you, consider buying me a coffee:  
-**[PayPal](https://www.paypal.me/elenacapasso80)**
-
-..and yes... 😊 the paypal account is correct. Thank you so much!
-
----
-
-## 📜 License
-[MIT](LICENSE.md)
+This integration is based on [Sanji78/feelfit](https://github.com/Sanji78/feelfit), used and adapted under the MIT License. The original copyright and license attribution are preserved in [LICENSE.md](LICENSE.md).

@@ -1,11 +1,13 @@
-"""Sensor platform for Feelfit — coordinator-backed entities (auto-refresh)."""
+"""Sensor platform for FITAGE — coordinator-backed entities (auto-refresh)."""
+
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+import math
+from datetime import datetime
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -15,12 +17,13 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import CONF_SELECTED_PROFILES, DOMAIN, LOGGER, SCAN_INTERVAL
+from .const import DOMAIN, LOGGER, SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(LOGGER)
 
 try:
     from homeassistant.const import UnitOfMass
+
     KG_UNIT = UnitOfMass.KILOGRAMS
 except ImportError:
     KG_UNIT = "kg"
@@ -29,8 +32,185 @@ PERCENT = "%"
 KCAL = "kcal"
 BPM = "bpm"
 
+_BODY_SHAPES = {
+    1: "invisible_obesity",
+    2: "hypokinetic",
+    3: "lean",
+    4: "normal",
+    5: "lean_muscular",
+    6: "obese_type",
+    7: "overweight",
+    8: "standard_muscular",
+    9: "very_muscular",
+}
+_ASIA_AREA_CODES = {"CN", "JP", "HK", "TW", "MO", "KR"}
+_CALCULATED_MEASUREMENT_KEYS = {
+    "muscle_ratio",
+    "bone_ratio",
+    "muscle_storage_capacity",
+    "body_shape",
+    "muscle_control",
+    "fat_control",
+    "weight_control",
+    "recommended_weight",
+}
+
+
+def _as_finite_float(value: Any) -> float | None:
+    """Convert a numeric value to a finite float."""
+    if isinstance(value, bool):
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    return result if math.isfinite(result) else None
+
+
+def _as_int(value: Any) -> int | None:
+    """Convert a finite integral number without accepting booleans."""
+    number = _as_finite_float(value)
+    if number is None or not number.is_integer():
+        return None
+    return int(number)
+
+
+def _fitage_round(value: float, digits: int = 2) -> float:
+    """Round like the FITAGE report calculator."""
+    factor = 10**digits
+    rounded = math.floor(abs(value) * factor + 0.5) / factor
+    return -rounded if value < 0 and rounded else rounded
+
+
+def _fitage_standard_type(
+    measurement: dict[str, Any], user_info: dict[str, Any]
+) -> str:
+    """Select the FITAGE body-composition standard from the account region."""
+    area_code = next(
+        (
+            value
+            for value in (
+                measurement.get("register_area_code"),
+                measurement.get("area_code"),
+                user_info.get("register_area_code"),
+                user_info.get("area_code"),
+                user_info.get("country"),
+            )
+            if isinstance(value, str) and value.strip()
+        ),
+        "NL",
+    )
+    return "asia" if area_code.strip().upper() in _ASIA_AREA_CODES else "occident"
+
+
+def _fitage_bodyfat_target(gender: int, standard_type: str) -> float:
+    """Return the FITAGE target body-fat percentage for normal measurements."""
+    if standard_type == "asia":
+        boundaries = (11.0, 21.0) if gender == 1 else (21.0, 31.0)
+    else:
+        boundaries = (13.0, 17.0) if gender == 1 else (21.0, 25.0)
+    return sum(boundaries) / 2
+
+
+def _fitage_lean_target_ratio(gender: int, weight: float, standard_type: str) -> float:
+    """Return the FITAGE target lean-component ratio for normal measurements."""
+    protein = (16.0, 18.0) if gender == 1 else (14.0, 16.0)
+    if standard_type == "asia":
+        water = (55.0, 65.0) if gender == 1 else (45.0, 60.0)
+        if gender == 1:
+            bone = (
+                (2.3, 2.7)
+                if weight <= 60
+                else ((2.7, 3.1) if weight < 75 else (3.0, 3.4))
+            )
+        else:
+            bone = (
+                (1.6, 2.0)
+                if weight <= 45
+                else ((2.0, 2.4) if weight < 60 else (2.3, 2.7))
+            )
+    else:
+        water = (50.0, 65.0) if gender == 1 else (45.0, 60.0)
+        bone = (3.0, 5.0) if gender == 1 else (2.5, 4.0)
+    return sum((*bone, *protein, *water)) / 2
+
+
+def _calculate_fitage_metrics(
+    measurement: dict[str, Any], user_info: dict[str, Any] | None = None
+) -> dict[str, int | float | str | None]:
+    """Calculate the report values reproduced from the FITAGE Android app."""
+    result: dict[str, int | float | str | None] = {
+        key: None for key in _CALCULATED_MEASUREMENT_KEYS
+    }
+    user_info = user_info or {}
+    weight = _as_finite_float(measurement.get("weight"))
+    gender = _as_int(measurement.get("gender"))
+    if gender not in (0, 1):
+        gender = _as_int(user_info.get("gender"))
+
+    if weight is not None and weight > 0:
+        sinew = _as_finite_float(measurement.get("sinew"))
+        if sinew is not None and sinew >= 0:
+            muscle_ratio = sinew / weight * 100
+            result["muscle_ratio"] = _fitage_round(muscle_ratio, 1)
+            if sinew > 0 and gender in (0, 1):
+                limits = (59, 64, 69, 74) if gender == 1 else (52, 57, 62, 67)
+                result["muscle_storage_capacity"] = next(
+                    (
+                        index
+                        for index, limit in enumerate(limits, 1)
+                        if muscle_ratio < limit
+                    ),
+                    5,
+                )
+
+        bone = _as_finite_float(measurement.get("bone"))
+        if bone is not None and bone >= 0:
+            result["bone_ratio"] = _fitage_round(bone / weight * 100, 1)
+
+    body_shape = _as_int(measurement.get("body_shape"))
+    if body_shape in _BODY_SHAPES:
+        result["body_shape"] = _BODY_SHAPES[body_shape]
+
+    if _as_int(measurement.get("mea_category")) != 0:
+        return result
+    if weight is None or weight <= 0 or gender not in (0, 1):
+        return result
+
+    bodyfat = _as_finite_float(measurement.get("bodyfat"))
+    fat_free_weight = _as_finite_float(measurement.get("fat_free_weight"))
+    if (
+        bodyfat is None
+        or not 0 <= bodyfat <= 100
+        or fat_free_weight is None
+        or fat_free_weight < 0
+    ):
+        return result
+
+    standard_type = _fitage_standard_type(measurement, user_info)
+    lean_target_ratio = _fitage_lean_target_ratio(gender, weight, standard_type)
+    muscle_control = max(weight * lean_target_ratio / 100 - fat_free_weight, 0.0)
+    target_fat_fraction = _fitage_bodyfat_target(gender, standard_type) / 100
+    current_fat_mass = weight * bodyfat / 100
+    fat_control = (
+        (weight + muscle_control) * target_fat_fraction - current_fat_mass
+    ) / (1 - target_fat_fraction)
+    weight_control = muscle_control + fat_control
+    recommended_weight = weight + weight_control
+
+    result.update(
+        {
+            "muscle_control": _fitage_round(muscle_control),
+            "fat_control": _fitage_round(fat_control),
+            "weight_control": _fitage_round(weight_control),
+            "recommended_weight": _fitage_round(recommended_weight),
+        }
+    )
+    return result
+
+
 def _map_date_format(fmt: str) -> str:
-    """Map Feelfit date format to Python strftime format."""
+    """Map FITAGE date format to Python strftime format."""
     if not fmt:
         return "%Y-%m-%d"
     mapping = {"dd": "%d", "MM": "%m", "yyyy": "%Y", "yy": "%y"}
@@ -38,6 +218,7 @@ def _map_date_format(fmt: str) -> str:
     for k, v in mapping.items():
         out = out.replace(k, v)
     return out
+
 
 def _format_birthday(raw_birthday: Any, date_format: str | None) -> str | None:
     """Format birthday from various input formats."""
@@ -64,12 +245,13 @@ def _format_birthday(raw_birthday: Any, date_format: str | None) -> str | None:
     except ValueError:
         return str(raw_birthday)
 
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up sensors for Feelfit - multi-profile support."""
+    """Set up sensors for FITAGE - multi-profile support."""
     data = hass.data[DOMAIN][entry.entry_id]
     api = data["api"]
     selected_profiles = data.get("selected_profiles") or []
@@ -81,18 +263,18 @@ async def async_setup_entry(
         try:
             payload = await api.async_fetch_all(
                 str(user_id),
-                selected_profiles=selected_profiles if selected_profiles else None
+                selected_profiles=selected_profiles if selected_profiles else None,
             )
-            _LOGGER.debug("Feelfit coordinator fetched keys: %s", list(payload.keys()))
+            _LOGGER.debug("FITAGE coordinator fetched keys: %s", list(payload.keys()))
             return payload
         except Exception as err:
-            _LOGGER.debug("Feelfit coordinator update failed: %s", err)
-            raise UpdateFailed(f"Feelfit fetch failed: {err}") from err
+            _LOGGER.debug("FITAGE coordinator update failed: %s", err)
+            raise UpdateFailed(f"FITAGE fetch failed: {err}") from err
 
     coordinator: DataUpdateCoordinator[dict[str, Any]] = DataUpdateCoordinator(
         hass,
         _LOGGER,
-        name="feelfit",
+        name="fitage",
         update_method=async_update_data,
         update_interval=SCAN_INTERVAL,
     )
@@ -116,51 +298,69 @@ async def async_setup_entry(
 
         _LOGGER.debug(
             "Creating sensors for profile: %s (user_id=%s, is_primary=%s, prefix=%s)",
-            account_name, profile_user_id, is_primary, prefix
+            account_name,
+            profile_user_id,
+            is_primary,
+            prefix,
         )
 
         if user_info:
             entities.append(
                 FeelfitUserSensor(
-                    coordinator, entry.entry_id,
+                    coordinator,
+                    entry.entry_id,
                     f"{prefix}account_name",
                     "account_name",
-                    f"{display_prefix}Account Name", None, profile_user_id
+                    f"{display_prefix}Account Name",
+                    None,
+                    profile_user_id,
                 )
             )
             if user_info.get("weight") is not None:
                 entities.append(
                     FeelfitUserSensor(
-                        coordinator, entry.entry_id,
+                        coordinator,
+                        entry.entry_id,
                         f"{prefix}weight",
                         "weight",
-                        f"{display_prefix}Weight", KG_UNIT, profile_user_id
+                        f"{display_prefix}Weight",
+                        KG_UNIT,
+                        profile_user_id,
                     )
                 )
             if user_info.get("height") is not None:
                 entities.append(
                     FeelfitUserSensor(
-                        coordinator, entry.entry_id,
+                        coordinator,
+                        entry.entry_id,
                         f"{prefix}height",
                         "height",
-                        f"{display_prefix}Height", "cm", profile_user_id
+                        f"{display_prefix}Height",
+                        "cm",
+                        profile_user_id,
                     )
                 )
             if "birthday" in user_info:
                 entities.append(
                     FeelfitBirthdaySensor(
-                        coordinator, entry.entry_id, f"{prefix}birthday",
+                        coordinator,
+                        entry.entry_id,
+                        f"{prefix}birthday",
                         "birthday",
-                        f"{display_prefix}Birthday", profile_user_id
+                        f"{display_prefix}Birthday",
+                        profile_user_id,
                     )
                 )
             if user_info.get("email"):
                 entities.append(
                     FeelfitUserSensor(
-                        coordinator, entry.entry_id,
+                        coordinator,
+                        entry.entry_id,
                         f"{prefix}email",
                         "email",
-                        f"{display_prefix}Email", None, profile_user_id
+                        f"{display_prefix}Email",
+                        None,
+                        profile_user_id,
                     )
                 )
 
@@ -168,18 +368,23 @@ async def async_setup_entry(
         goals_list = goals_payload.get("goals") or []
         _LOGGER.debug(
             "Profile %s: Processing %d goals",
-            user_info.get("account_name"), len(goals_list)
+            user_info.get("account_name"),
+            len(goals_list),
         )
         for g in goals_list:
             g_type = g.get("goal_type")
             _LOGGER.debug(
                 "Profile %s goal: type=%s, value=%s, full_data=%s",
-                user_info.get("account_name"), g_type, g.get("goal_value"), g
+                user_info.get("account_name"),
+                g_type,
+                g.get("goal_value"),
+                g,
             )
             if not g_type:
                 _LOGGER.warning(
                     "Skipping goal with missing goal_type for profile %s: %s",
-                    user_info.get("account_name"), g
+                    user_info.get("account_name"),
+                    g,
                 )
                 continue
             unique_key = f"{prefix}goal_{g_type}"
@@ -193,7 +398,13 @@ async def async_setup_entry(
                 unit = "ml"
             entities.append(
                 FeelfitGoalSensor(
-                    coordinator, entry.entry_id, unique_key, translation_key, g_type, unit, profile_user_id
+                    coordinator,
+                    entry.entry_id,
+                    unique_key,
+                    translation_key,
+                    g_type,
+                    unit,
+                    profile_user_id,
                 )
             )
 
@@ -221,6 +432,14 @@ async def async_setup_entry(
                 ("body_water_mass", "Body Water Mass", KG_UNIT),
                 ("protein_mass", "Protein Mass", KG_UNIT),
                 ("body_fat_mass", "Body Fat Mass", KG_UNIT),
+                ("muscle_ratio", "Muscle Ratio", PERCENT),
+                ("bone_ratio", "Bone Ratio", PERCENT),
+                ("muscle_storage_capacity", "Muscle Storage Capacity", None),
+                ("body_shape", "Body Shape", None),
+                ("muscle_control", "Muscle Control", KG_UNIT),
+                ("fat_control", "Fat Control", KG_UNIT),
+                ("weight_control", "Weight Control", KG_UNIT),
+                ("recommended_weight", "Recommended Weight", KG_UNIT),
             ]
 
             seen: set[str] = set()
@@ -246,7 +465,7 @@ async def async_setup_entry(
     for idx, d in enumerate(device_binds):
         scale_name = d.get("scale_name") or d.get("internal_model") or f"device_{idx}"
         unique = f"device_{idx}_{d.get('mac') or idx}"
-        label = f"Feelfit {scale_name}"
+        label = f"FITAGE {scale_name}"
         entities.append(
             FeelfitDeviceSensor(
                 coordinator, entry.entry_id, unique, label, None, device_index=idx
@@ -255,7 +474,10 @@ async def async_setup_entry(
 
     async_add_entities(entities, True)
 
-class FeelfitUserSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity):
+
+class FeelfitUserSensor(
+    CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity
+):
     """Sensor for user info attributes."""
 
     def __init__(
@@ -298,12 +520,13 @@ class FeelfitUserSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]]
         user_info = None
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 user_info = profile_info
                 break
 
         if not user_info and profiles:
-
             user_info = profiles[0].get("user_info") or {}
 
         if not user_info:
@@ -314,7 +537,7 @@ class FeelfitUserSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]]
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra attributes."""
-        return {"source": "feelfit", "attribute": self._attr_key}
+        return {"source": "fitage", "attribute": self._attr_key}
 
     @property
     def device_info(self) -> dict[str, Any]:
@@ -324,7 +547,9 @@ class FeelfitUserSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]]
         user_info = None
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 user_info = profile_info
                 break
 
@@ -337,12 +562,15 @@ class FeelfitUserSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]]
         user_id = user_info.get("user_id") or self._entry_id
         return {
             "identifiers": {(DOMAIN, f"user_{user_id}")},
-            "name": user_info.get("account_name") or f"Feelfit User {user_id}",
-            "manufacturer": "Feelfit",
-            "model": "Feelfit Account",
+            "name": user_info.get("account_name") or f"FITAGE User {user_id}",
+            "manufacturer": "FITAGE",
+            "model": "FITAGE Account",
         }
 
-class FeelfitBirthdaySensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity):
+
+class FeelfitBirthdaySensor(
+    CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity
+):
     """Sensor for birthday with date formatting."""
 
     def __init__(
@@ -378,7 +606,9 @@ class FeelfitBirthdaySensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, An
         user_info = None
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 user_info = profile_info
                 user_settings = profile_data.get("user_settings") or {}
                 break
@@ -401,12 +631,14 @@ class FeelfitBirthdaySensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, An
         user_settings = {}
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 user_settings = profile_data.get("user_settings") or {}
                 break
 
         return {
-            "source": "feelfit",
+            "source": "fitage",
             "attribute": self._attr_key,
             "date_format": user_settings.get("date_format"),
         }
@@ -419,7 +651,9 @@ class FeelfitBirthdaySensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, An
         user_info = None
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 user_info = profile_info
                 break
 
@@ -431,12 +665,15 @@ class FeelfitBirthdaySensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, An
         user_id = user_info.get("user_id") or self._entry_id
         return {
             "identifiers": {(DOMAIN, f"user_{user_id}")},
-            "name": user_info.get("account_name") or f"Feelfit User {user_id}",
-            "manufacturer": "Feelfit",
-            "model": "Feelfit Account",
+            "name": user_info.get("account_name") or f"FITAGE User {user_id}",
+            "manufacturer": "FITAGE",
+            "model": "FITAGE Account",
         }
 
-class FeelfitGoalSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity):
+
+class FeelfitGoalSensor(
+    CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity
+):
     """Sensor for goal values."""
 
     def __init__(
@@ -478,7 +715,9 @@ class FeelfitGoalSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]]
         goals_list = []
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 goals_payload = profile_data.get("goals") or {}
                 goals_list = goals_payload.get("goals") or []
                 break
@@ -495,7 +734,7 @@ class FeelfitGoalSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]]
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra attributes."""
-        return {"source": "feelfit", "goal_type": self._goal_type}
+        return {"source": "fitage", "goal_type": self._goal_type}
 
     @property
     def device_info(self) -> dict[str, Any]:
@@ -505,7 +744,9 @@ class FeelfitGoalSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]]
         user_info = None
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 user_info = profile_info
                 break
 
@@ -518,12 +759,15 @@ class FeelfitGoalSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]]
         user_id = user_info.get("user_id") or self._entry_id
         return {
             "identifiers": {(DOMAIN, f"user_{user_id}")},
-            "name": user_info.get("account_name") or f"Feelfit User {user_id}",
-            "manufacturer": "Feelfit",
-            "model": "Feelfit Account",
+            "name": user_info.get("account_name") or f"FITAGE User {user_id}",
+            "manufacturer": "FITAGE",
+            "model": "FITAGE Account",
         }
 
-class FeelfitDeviceSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity):
+
+class FeelfitDeviceSensor(
+    CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity
+):
     """Sensor for bound device info."""
 
     def __init__(
@@ -556,10 +800,9 @@ class FeelfitDeviceSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]
     @property
     def native_value(self) -> str | None:
         """Return device name."""
-        device_binds = (
-            (self.coordinator.data or {}).get("device_binds", {}).get("device_binds")
-            or []
-        )
+        device_binds = (self.coordinator.data or {}).get("device_binds", {}).get(
+            "device_binds"
+        ) or []
         if len(device_binds) > self._device_index:
             d = device_binds[self._device_index]
             return d.get("scale_name") or d.get("internal_model") or d.get("mac")
@@ -568,10 +811,9 @@ class FeelfitDeviceSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra attributes."""
-        device_binds = (
-            (self.coordinator.data or {}).get("device_binds", {}).get("device_binds")
-            or []
-        )
+        device_binds = (self.coordinator.data or {}).get("device_binds", {}).get(
+            "device_binds"
+        ) or []
         attrs: dict[str, Any] = {}
         if len(device_binds) > self._device_index:
             d = device_binds[self._device_index]
@@ -611,40 +853,49 @@ class FeelfitDeviceSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]
     @property
     def device_info(self) -> dict[str, Any]:
         """Return device info."""
-        device_binds = (
-            (self.coordinator.data or {}).get("device_binds", {}).get("device_binds")
-            or []
-        )
+        device_binds = (self.coordinator.data or {}).get("device_binds", {}).get(
+            "device_binds"
+        ) or []
         user_info = (self.coordinator.data or {}).get("user_info") or {}
 
         if len(device_binds) > self._device_index:
             d = device_binds[self._device_index]
             scale_name = (
-                d.get("scale_name") or d.get("internal_model") or f"Device {self._device_index}"
+                d.get("scale_name")
+                or d.get("internal_model")
+                or f"Device {self._device_index}"
             )
             model_info = d.get("model_info") or {}
             brand_info = model_info.get("brand_info") or {}
             brand = d.get("brand_name") or brand_info.get("brand_name")
-            friendly_name = f"Feelfit {scale_name}"
+            friendly_name = f"FITAGE {scale_name}"
             if brand:
                 friendly_name = f"{friendly_name} ({brand})"
-            identifier = d.get("mac") or f"{user_info.get('user_id')}_device_{self._device_index}"
+            identifier = (
+                d.get("mac")
+                or f"{user_info.get('user_id')}_device_{self._device_index}"
+            )
             return {
                 "identifiers": {(DOMAIN, identifier)},
                 "name": friendly_name,
-                "manufacturer": brand or "Feelfit",
-                "model": model_info.get("model") or d.get("internal_model") or "Feelfit Device",
+                "manufacturer": brand or "FITAGE",
+                "model": model_info.get("model")
+                or d.get("internal_model")
+                or "FITAGE Device",
             }
 
         user_id = user_info.get("user_id")
         return {
             "identifiers": {(DOMAIN, f"{user_id}_device_{self._device_index}")},
-            "name": f"{user_info.get('account_name', 'Feelfit User')} device {self._device_index}",
-            "manufacturer": "Feelfit",
-            "model": "Feelfit Device",
+            "name": f"{user_info.get('account_name', 'FITAGE User')} device {self._device_index}",
+            "manufacturer": "FITAGE",
+            "model": "FITAGE Device",
         }
 
-class FeelfitMeasurementSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity):
+
+class FeelfitMeasurementSensor(
+    CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity
+):
     """Sensor for measurement values."""
 
     def __init__(
@@ -680,30 +931,74 @@ class FeelfitMeasurementSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str,
         return self._unit
 
     @property
+    def device_class(self) -> SensorDeviceClass | None:
+        """Return the sensor device class."""
+        if self._measurement_key == "body_shape":
+            return SensorDeviceClass.ENUM
+        return None
+
+    @property
+    def options(self) -> list[str] | None:
+        """Return the valid body-shape states."""
+        if self._measurement_key == "body_shape":
+            return list(_BODY_SHAPES.values())
+        return None
+
+    @property
     def native_value(self) -> Any:
         """Return measurement value."""
         profiles = (self.coordinator.data or {}).get("profiles") or []
 
         measurement = None
+        measurement_user_info: dict[str, Any] = {}
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 measurements_payload = profile_data.get("measurements") or {}
                 measurement = measurements_payload.get("last_measurement")
+                measurement_user_info = profile_info
                 break
 
         if not measurement and profiles:
             measurements_payload = profiles[0].get("measurements") or {}
             measurement = measurements_payload.get("last_measurement")
+            measurement_user_info = profiles[0].get("user_info") or {}
 
         if not measurement:
             _LOGGER.debug(
-                "FeelfitMeasurementSensor: no measurement for key %s",
+                "FITAGE measurement sensor: no measurement for key %s",
                 self._measurement_key,
             )
             return None
 
+        if self._measurement_key in _CALCULATED_MEASUREMENT_KEYS:
+            return _calculate_fitage_metrics(measurement, measurement_user_info).get(
+                self._measurement_key
+            )
+
         raw_val = measurement.get(self._measurement_key)
+        mass_percentage_keys = {
+            "body_fat_mass": "bodyfat",
+            "body_water_mass": "water",
+            "protein_mass": "protein",
+        }
+        if percentage_key := mass_percentage_keys.get(self._measurement_key):
+            mass = _as_finite_float(raw_val)
+            if mass is not None and mass > 0:
+                raw_val = mass
+            else:
+                weight = _as_finite_float(measurement.get("weight"))
+                percentage = _as_finite_float(measurement.get(percentage_key))
+                if (
+                    weight is None
+                    or weight <= 0
+                    or percentage is None
+                    or percentage < 0
+                ):
+                    return None
+                raw_val = weight * percentage / 100
 
         if self._measurement_key == "time_stamp" and raw_val:
             try:
@@ -751,7 +1046,9 @@ class FeelfitMeasurementSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str,
         measurement = None
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 measurements_payload = profile_data.get("measurements") or {}
                 measurement = measurements_payload.get("last_measurement")
                 break
@@ -784,7 +1081,9 @@ class FeelfitMeasurementSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str,
         user_info = None
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(self._profile_user_id):
+            if self._profile_user_id and str(profile_info.get("user_id")) == str(
+                self._profile_user_id
+            ):
                 user_info = profile_info
                 break
 
@@ -797,7 +1096,7 @@ class FeelfitMeasurementSensor(CoordinatorEntity[DataUpdateCoordinator[dict[str,
         user_id = user_info.get("user_id") or self._entry_id
         return {
             "identifiers": {(DOMAIN, f"user_{user_id}")},
-            "name": user_info.get("account_name") or f"Feelfit User {user_id}",
-            "manufacturer": "Feelfit",
-            "model": "Feelfit Account",
+            "name": user_info.get("account_name") or f"FITAGE User {user_id}",
+            "manufacturer": "FITAGE",
+            "model": "FITAGE Account",
         }

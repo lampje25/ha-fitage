@@ -1,28 +1,27 @@
-"""Constants for the Feelfit integration (centralized)."""
+"""Constants for the FITAGE integration."""
 
 from datetime import timedelta
-from typing import Dict
 
-DOMAIN = "feelfit"
+DOMAIN = "fitage"
 PLATFORMS = ["sensor"]
-LOGGER = "custom_components.feelfit"
+LOGGER = "custom_components.fitage"
 
 SCAN_INTERVAL = timedelta(seconds=120)
 
 CONF_SELECTED_PROFILES = "selected_profiles"
 CONF_PROFILES_LIST = "profiles_list"
 
-API_BASE = "https://feelfit.qnclouds.com/api/v4"
+API_BASE = "https://fitage.qnclouds.com/api/v4"
 
-DEFAULT_QUERY_PARAMS: Dict[str, str] = {
+DEFAULT_QUERY_PARAMS: dict[str, str] = {
     "app_revision": "4.16.0",
     "html_version": "14.16.0",
     "cellphone_type": "samsung SM-T510",
     "system_type": "11_30",
-    "zone": "Europe/Rome",
-    "area_code": "IT",
-    "locale": "it",
-    "app_id": "Feelfit",
+    "zone": "Europe/Amsterdam",
+    "area_code": "NL",
+    "locale": "nl",
+    "app_id": "Fitage",
     "platform": "android",
 }
 
@@ -40,14 +39,14 @@ Jr04fz2b2WCcN0ta/rbF2nYAnMVAk2OJVZAMudOiMWhcxV1nNJiKgTNNr13de0EQ
 IiOL2CUBzu+HmIfUbQIDAQAB
 -----END PUBLIC KEY-----"""
 
-COMMON_HEADERS: Dict[str, str] = {
+COMMON_HEADERS: dict[str, str] = {
     "Accept-Encoding": "gzip",
     "Connection": "Keep-Alive",
-    "Host": "feelfit.qnclouds.com",
+    "Host": "fitage.qnclouds.com",
     "User-Agent": "okhttp/4.9.1",
 }
 
-LOGIN_HEADERS: Dict[str, str] = {
+LOGIN_HEADERS: dict[str, str] = {
     **COMMON_HEADERS,
     "Authorization": "Bearer",
     "Content-Type": "application/json;charset=UTF-8",

@@ -1,4 +1,5 @@
-"""The Feelfit integration."""
+"""The FITAGE integration."""
+
 from __future__ import annotations
 
 import logging
@@ -11,10 +12,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import FeelfitApi, FeelfitApiError
 from .const import CONF_SELECTED_PROFILES, DOMAIN, PLATFORMS
 
-_LOGGER = logging.getLogger("custom_components.feelfit")
+_LOGGER = logging.getLogger("custom_components.fitage")
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Feelfit from a config entry."""
+    """Set up FITAGE from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
     email: str | None = entry.data.get("email")
@@ -22,9 +24,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     saved_user_info: dict[str, Any] = entry.data.get("user_info") or {}
 
     selected_profiles: list[str] = (
-        entry.options.get(CONF_SELECTED_PROFILES) or
-        entry.data.get(CONF_SELECTED_PROFILES) or
-        []
+        entry.options.get(CONF_SELECTED_PROFILES)
+        or entry.data.get(CONF_SELECTED_PROFILES)
+        or []
     )
 
     if not email:
@@ -54,16 +56,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if api.token and user_id:
             payload = await api.async_fetch_all(
                 str(user_id),
-                selected_profiles=selected_profiles if selected_profiles else None
+                selected_profiles=selected_profiles if selected_profiles else None,
             )
-            hass.data[DOMAIN][entry.entry_id].update({
-                "profiles": payload.get("profiles") or [],
-                "device_binds": payload.get("device_binds") or {},
-            })
+            hass.data[DOMAIN][entry.entry_id].update(
+                {
+                    "profiles": payload.get("profiles") or [],
+                    "device_binds": payload.get("device_binds") or {},
+                }
+            )
     except FeelfitApiError as err:
         _LOGGER.debug("Initial fetch failed (will retry via coordinator): %s", err)
-    except Exception as err:
-        _LOGGER.exception("Unexpected error during initial Feelfit fetch: %s", err)
+    except Exception:
+        _LOGGER.exception("Unexpected error during initial FITAGE fetch")
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -71,9 +75,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     return True
 
+
 async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Handle options update - rimuove entità e device dei profili disattivati."""
-    from homeassistant.helpers import entity_registry as er, device_registry as dr
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
 
     new_selected = entry.options.get(CONF_SELECTED_PROFILES, [])
     old_selected = entry.data.get(CONF_SELECTED_PROFILES, [])
@@ -88,7 +94,6 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
         devices_to_remove = []
         for device_entry in device_registry.devices.values():
-
             for identifier_tuple in device_entry.identifiers:
                 if identifier_tuple[0] == DOMAIN:
                     device_id_str = identifier_tuple[1]
@@ -97,8 +102,11 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
                         user_id = device_id_str.replace("user_", "")
                         if user_id in removed_profiles:
                             devices_to_remove.append(device_entry.id)
-                            _LOGGER.debug("Found device to remove: %s (user_id: %s)",
-                                        device_entry.name, user_id)
+                            _LOGGER.debug(
+                                "Found device to remove: %s (user_id: %s)",
+                                device_entry.name,
+                                user_id,
+                            )
                             break
 
         for device_id in devices_to_remove:
@@ -106,13 +114,13 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
             _LOGGER.info("Removed device: %s", device_id)
 
         if devices_to_remove:
-            _LOGGER.info("Removed %d devices for deselected profiles", len(devices_to_remove))
+            _LOGGER.info(
+                "Removed %d devices for deselected profiles", len(devices_to_remove)
+            )
         else:
-
             entries_to_remove = []
             for entity_entry in entity_registry.entities.values():
                 if entity_entry.config_entry_id == entry.entry_id:
-
                     for removed_user_id in removed_profiles:
                         if str(removed_user_id) in entity_entry.unique_id:
                             entries_to_remove.append(entity_entry.entity_id)
@@ -123,9 +131,13 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
                 entity_registry.async_remove(entity_id)
 
             if entries_to_remove:
-                _LOGGER.info("Removed %d entities for deselected profiles", len(entries_to_remove))
+                _LOGGER.info(
+                    "Removed %d entities for deselected profiles",
+                    len(entries_to_remove),
+                )
 
     await hass.config_entries.async_reload(entry.entry_id)
+
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""

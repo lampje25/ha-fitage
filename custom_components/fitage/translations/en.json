@@ -1,10 +1,10 @@
 {
-  "title": "Feelfit",
+  "title": "FITAGE",
   "config": {
     "step": {
       "user": {
-        "title": "Configure Feelfit",
-        "description": "Enter your Feelfit account credentials to connect Home Assistant.",
+        "title": "Configure FITAGE",
+        "description": "Enter your FITAGE account credentials to connect Home Assistant.",
         "data": {
           "email": "Email",
           "password": "Password"
@@ -66,7 +66,7 @@
         "name": "Protein (%)"
       },
       "measurement_sinew": {
-        "name": "Muscular Mass (Kg)"
+        "name": "Muscle Mass"
       },
       "measurement_subfat": {
         "name": "Subcutaneous Fat (%)"
@@ -97,6 +97,41 @@
       },
       "measurement_body_fat_mass": {
         "name": "Body Fat Mass"
+      },
+      "measurement_muscle_ratio": {
+        "name": "Muscle Ratio"
+      },
+      "measurement_bone_ratio": {
+        "name": "Bone Ratio"
+      },
+      "measurement_muscle_storage_capacity": {
+        "name": "Muscle Storage Capacity"
+      },
+      "measurement_body_shape": {
+        "name": "Body Shape",
+        "state": {
+          "invisible_obesity": "Invisible obesity",
+          "hypokinetic": "Hypokinetic",
+          "lean": "Lean",
+          "normal": "Normal",
+          "lean_muscular": "Lean muscular",
+          "obese_type": "Obese",
+          "overweight": "Overweight",
+          "standard_muscular": "Standard muscular",
+          "very_muscular": "Very muscular"
+        }
+      },
+      "measurement_muscle_control": {
+        "name": "Muscle Control"
+      },
+      "measurement_fat_control": {
+        "name": "Fat Control"
+      },
+      "measurement_weight_control": {
+        "name": "Weight Control"
+      },
+      "measurement_recommended_weight": {
+        "name": "Recommended Weight"
       }
     }
   }

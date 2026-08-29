@@ -1,4 +1,5 @@
-"""Config flow for Feelfit integration."""
+"""Config flow for the FITAGE integration."""
+
 from __future__ import annotations
 
 import logging
@@ -6,12 +7,11 @@ from typing import Any
 
 import voluptuous as vol
 from aiohttp import ClientSession
-
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import FeelfitApi, FeelfitApiError
 from .const import CONF_PROFILES_LIST, CONF_SELECTED_PROFILES, DOMAIN, LOGGER
@@ -25,9 +25,8 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
     }
 )
 
-async def validate_input(
-    hass: HomeAssistant, data: dict[str, Any]
-) -> dict[str, Any]:
+
+async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
     session: ClientSession = async_get_clientsession(hass)
     client = FeelfitApi(hass, session, data["email"].strip())
@@ -35,8 +34,9 @@ async def validate_input(
     login_data = await client.async_login(data["password"])
     return login_data
 
+
 class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Feelfit."""
+    """Handle a config flow for FITAGE."""
 
     VERSION = 1
 
@@ -65,12 +65,13 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-
                 self._user_info = login_data.get("user_info", {})
                 token_info = login_data.get("token_info", {})
                 self._token = token_info.get("token")
                 remaining_time = token_info.get("remaining_time")
-                self._token_expires = str(int(remaining_time)) if remaining_time else None
+                self._token_expires = (
+                    str(int(remaining_time)) if remaining_time else None
+                )
                 self._email = user_input["email"].strip()
 
                 session = async_get_clientsession(self.hass)
@@ -88,7 +89,7 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             p.get("account_name"),
                             p.get("nickname"),
                             p.get("email"),
-                            p.get("is_primary")
+                            p.get("is_primary"),
                         )
                 except Exception as exc:
                     _LOGGER.error("Failed to fetch profiles: %s", exc)
@@ -107,19 +108,16 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Handle profile selection step."""
         if user_input is not None:
-
             selected = []
             for label, is_selected in user_input.items():
                 if is_selected and label != CONF_SELECTED_PROFILES:
-
                     user_id = self._label_to_user_id.get(label, label)
                     selected.append(user_id)
 
             if not selected:
-
                 primary = next(
                     (p for p in self._all_profiles if p.get("is_primary", False)),
-                    self._all_profiles[0] if self._all_profiles else self._user_info
+                    self._all_profiles[0] if self._all_profiles else self._user_info,
                 )
                 selected = [str(primary.get("user_id"))]
 
@@ -145,7 +143,7 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             title = self._user_info.get("account_name") or self._email
             if len(selected) > 1:
-                title = f"{title} (+{len(selected)-1} profili)"
+                title = f"{title} (+{len(selected) - 1} profili)"
 
             return self.async_create_entry(title=title, data=entry_data)
 
@@ -165,22 +163,26 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             _LOGGER.debug("Profile in UI: user_id=%s, label=%s", user_id, label)
 
-            profiles_schema[vol.Optional(label, default=is_primary, description={"suggested_value": is_primary})] = selector.BooleanSelector()
+            profiles_schema[
+                vol.Optional(
+                    label,
+                    default=is_primary,
+                    description={"suggested_value": is_primary},
+                )
+            ] = selector.BooleanSelector()
 
         self._label_to_user_id = {}
         for p in self._all_profiles:
-            account_name = p.get('account_name', 'Profilo sconosciuto')
-            is_primary_label = ' (Primario)' if p.get('is_primary') else ''
-            email_part = f" - {p.get('email')}" if p.get('email') else ''
+            account_name = p.get("account_name", "Profilo sconosciuto")
+            is_primary_label = " (Primario)" if p.get("is_primary") else ""
+            email_part = f" - {p.get('email')}" if p.get("email") else ""
             label_key = f"{account_name}{is_primary_label}{email_part}"
             self._label_to_user_id[label_key] = str(p.get("user_id"))
 
         return self.async_show_form(
             step_id="select_profiles",
             data_schema=vol.Schema(profiles_schema),
-            description_placeholders={
-                "num_profiles": str(len(self._all_profiles))
-            },
+            description_placeholders={"num_profiles": str(len(self._all_profiles))},
         )
 
     @staticmethod
@@ -191,8 +193,9 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Get the options flow for this handler."""
         return FeelfitOptionsFlowHandler(config_entry)
 
+
 class FeelfitOptionsFlowHandler(config_entries.OptionsFlow):
-    """Handle Feelfit options."""
+    """Handle FITAGE options."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
@@ -226,12 +229,11 @@ class FeelfitOptionsFlowHandler(config_entries.OptionsFlow):
 
             self._all_profiles = await api.async_list_all_profiles()
 
-        except Exception as exc:
-            _LOGGER.error("Failed to fetch profiles in options: %s", exc, exc_info=True)
+        except Exception:
+            _LOGGER.exception("Failed to fetch profiles in options")
             return self.async_abort(reason="fetch_failed")
 
         if user_input is not None:
-
             selected = []
             for label, is_selected in user_input.items():
                 if is_selected:
@@ -239,24 +241,22 @@ class FeelfitOptionsFlowHandler(config_entries.OptionsFlow):
                     selected.append(user_id)
 
             if not selected:
-
                 primary = next(
                     (p for p in self._all_profiles if p.get("is_primary", False)),
-                    self._all_profiles[0] if self._all_profiles else None
+                    self._all_profiles[0] if self._all_profiles else None,
                 )
                 if primary:
                     selected = [str(primary.get("user_id"))]
 
             return self.async_create_entry(
-                title="",
-                data={CONF_SELECTED_PROFILES: selected}
+                title="", data={CONF_SELECTED_PROFILES: selected}
             )
 
         profiles_schema = {}
 
         current_selection = self.config_entry.options.get(
             CONF_SELECTED_PROFILES,
-            self.config_entry.data.get(CONF_SELECTED_PROFILES, [])
+            self.config_entry.data.get(CONF_SELECTED_PROFILES, []),
         )
 
         for profile in self._all_profiles:
@@ -274,21 +274,26 @@ class FeelfitOptionsFlowHandler(config_entries.OptionsFlow):
 
             is_selected = user_id in current_selection
 
-            _LOGGER.debug("Options profile: user_id=%s, label=%s, selected=%s", user_id, label, is_selected)
+            _LOGGER.debug(
+                "Options profile: user_id=%s, label=%s, selected=%s",
+                user_id,
+                label,
+                is_selected,
+            )
 
-            profiles_schema[vol.Optional(label, default=is_selected)] = selector.BooleanSelector()
+            profiles_schema[vol.Optional(label, default=is_selected)] = (
+                selector.BooleanSelector()
+            )
 
         for p in self._all_profiles:
-            account_name = p.get('account_name', 'Profilo sconosciuto')
-            is_primary_label = ' (Primario)' if p.get('is_primary') else ''
-            email_part = f" - {p.get('email')}" if p.get('email') else ''
+            account_name = p.get("account_name", "Profilo sconosciuto")
+            is_primary_label = " (Primario)" if p.get("is_primary") else ""
+            email_part = f" - {p.get('email')}" if p.get("email") else ""
             label_key = f"{account_name}{is_primary_label}{email_part}"
             self._label_to_user_id[label_key] = str(p.get("user_id"))
 
         return self.async_show_form(
             step_id="profiles",
             data_schema=vol.Schema(profiles_schema),
-            description_placeholders={
-                "num_profiles": str(len(self._all_profiles))
-            },
+            description_placeholders={"num_profiles": str(len(self._all_profiles))},
         )

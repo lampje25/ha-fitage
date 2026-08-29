@@ -15,3 +15,9 @@ build/
 # Home Assistant
 .storage/
 home-assistant.log
+
+apk-input/
+jadx-output/
+tools/
+.ruff_cache/
+**/__pycache__/
