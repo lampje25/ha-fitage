@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from .assessment import assess_measurement
 from .const import DOMAIN, LOGGER, SCAN_INTERVAL
 
 _LOGGER = logging.getLogger(LOGGER)
@@ -265,6 +266,22 @@ async def async_setup_entry(
                 str(user_id),
                 selected_profiles=selected_profiles if selected_profiles else None,
             )
+            for profile_data in payload.get("profiles") or []:
+                measurement = (profile_data.get("measurements") or {}).get(
+                    "last_measurement"
+                )
+                if not measurement:
+                    profile_data["assessments"] = {}
+                    continue
+                try:
+                    profile_data["assessments"] = assess_measurement(
+                        measurement,
+                        profile_data.get("user_info") or {},
+                        profile_data.get("user_settings") or {},
+                    )
+                except Exception:  # Assessment failure must never break sensor states.
+                    profile_data["assessments"] = {}
+                    _LOGGER.exception("Unable to calculate FITAGE assessments")
             _LOGGER.debug("FITAGE coordinator fetched keys: %s", list(payload.keys()))
             return payload
         except Exception as err:
@@ -961,11 +978,6 @@ class FeelfitMeasurementSensor(
                 measurement_user_info = profile_info
                 break
 
-        if not measurement and profiles:
-            measurements_payload = profiles[0].get("measurements") or {}
-            measurement = measurements_payload.get("last_measurement")
-            measurement_user_info = profiles[0].get("user_info") or {}
-
         if not measurement:
             _LOGGER.debug(
                 "FITAGE measurement sensor: no measurement for key %s",
@@ -1044,6 +1056,7 @@ class FeelfitMeasurementSensor(
         profiles = (self.coordinator.data or {}).get("profiles") or []
 
         measurement = None
+        assessment_attributes: dict[str, Any] = {}
         for profile_data in profiles:
             profile_info = profile_data.get("user_info") or {}
             if self._profile_user_id and str(profile_info.get("user_id")) == str(
@@ -1051,11 +1064,10 @@ class FeelfitMeasurementSensor(
             ):
                 measurements_payload = profile_data.get("measurements") or {}
                 measurement = measurements_payload.get("last_measurement")
+                assessment_attributes = (profile_data.get("assessments") or {}).get(
+                    self._measurement_key, {}
+                )
                 break
-
-        if not measurement and profiles:
-            measurements_payload = profiles[0].get("measurements") or {}
-            measurement = measurements_payload.get("last_measurement")
 
         attrs: dict[str, Any] = {}
         if measurement:
@@ -1071,6 +1083,7 @@ class FeelfitMeasurementSensor(
             ):
                 if k in measurement:
                     attrs[k] = measurement.get(k)
+            attrs.update(assessment_attributes)
         return attrs
 
     @property

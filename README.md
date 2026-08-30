@@ -16,6 +16,10 @@ Depending on the data returned for your profile and scale, the integration provi
 
 The report-control sensors reproduce the verified normal FITAGE calculation route (`mea_category = 0`). They are unavailable for unsupported measurement categories rather than using an unverified calculation.
 
+## FITAGE assessments
+
+Assessment categories reconstructed from the official FITAGE app logic appear as attributes on the existing measurement sensors; the integration does not create extra assessment entities. Some limits depend on gender and region. Height-dependent assessments use the historical height stored with that specific measurement, never the current profile height. Assessments are omitted when a required input or a reliably identified supported region is unavailable.
+
 ## Installation with HACS
 
 1. Install [HACS](https://hacs.xyz/) if it is not already available.
