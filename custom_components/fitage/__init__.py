@@ -7,12 +7,43 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import FeelfitApi, FeelfitApiError
 from .const import CONF_SELECTED_PROFILES, DOMAIN, PLATFORMS
+from .migration import migrate_entity_registry
 
 _LOGGER = logging.getLogger("custom_components.fitage")
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate a v1.2 config entry before canonical entities are registered."""
+    if entry.version != 1:
+        return False
+    if entry.minor_version >= 2:
+        return True
+
+    registry = er.async_get(hass)
+    result = migrate_entity_registry(
+        registry,
+        entry,
+        er.async_entries_for_config_entry(registry, entry.entry_id),
+    )
+    if result.collisions:
+        _LOGGER.error(
+            "FITAGE entity migration stopped because %d canonical identity "
+            "collision(s) require manual resolution",
+            result.collisions,
+        )
+        return False
+
+    hass.config_entries.async_update_entry(entry, version=1, minor_version=2)
+    _LOGGER.debug(
+        "Successfully migrated %d FITAGE entity registry entries",
+        result.migrated,
+    )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -64,10 +95,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "device_binds": payload.get("device_binds") or {},
                 }
             )
-    except FeelfitApiError as err:
-        _LOGGER.debug("Initial fetch failed (will retry via coordinator): %s", err)
+    except FeelfitApiError:
+        _LOGGER.debug("Initial fetch failed; the coordinator will retry")
     except Exception:
-        _LOGGER.exception("Unexpected error during initial FITAGE fetch")
+        _LOGGER.error("Unexpected error during initial FITAGE fetch")
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
@@ -87,7 +118,9 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
     removed_profiles = set(old_selected) - set(new_selected)
 
     if removed_profiles:
-        _LOGGER.debug("Removing entities for deselected profiles: %s", removed_profiles)
+        _LOGGER.debug(
+            "Removing entities for %d deselected profile(s)", len(removed_profiles)
+        )
 
         entity_registry = er.async_get(hass)
         device_registry = dr.async_get(hass)
@@ -102,16 +135,11 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
                         user_id = device_id_str.replace("user_", "")
                         if user_id in removed_profiles:
                             devices_to_remove.append(device_entry.id)
-                            _LOGGER.debug(
-                                "Found device to remove: %s (user_id: %s)",
-                                device_entry.name,
-                                user_id,
-                            )
                             break
 
         for device_id in devices_to_remove:
             device_registry.async_remove_device(device_id)
-            _LOGGER.info("Removed device: %s", device_id)
+            _LOGGER.debug("Removed a device for a deselected profile")
 
         if devices_to_remove:
             _LOGGER.info(
@@ -124,7 +152,6 @@ async def async_update_options(hass: HomeAssistant, entry: ConfigEntry) -> None:
                     for removed_user_id in removed_profiles:
                         if str(removed_user_id) in entity_entry.unique_id:
                             entries_to_remove.append(entity_entry.entity_id)
-                            _LOGGER.debug("Removing entity: %s", entity_entry.entity_id)
                             break
 
             for entity_id in entries_to_remove:

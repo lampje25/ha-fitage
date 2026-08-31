@@ -16,6 +16,24 @@ Depending on the data returned for your profile and scale, the integration provi
 
 The report-control sensors reproduce the verified normal FITAGE calculation route (`mea_category = 0`). They are unavailable for unsupported measurement categories rather than using an unverified calculation.
 
+## What's new in v1.3.0
+
+FITAGE v1.3.0 gives every profile entity a stable internal identity based on its FITAGE user ID. Entities are created consistently even when optional profile values, goals, or measurements are temporarily missing, and data from one profile is no longer used as a fallback for another profile.
+
+For dynamic dashboards, profile entities expose these attributes:
+
+- `fitage_user_id`
+- `fitage_entity_kind`
+- `fitage_metric`
+
+These attributes let dashboards find entities without relying on an entity ID derived from a profile name. For example, a dashboard can identify the latest weight using `fitage_entity_kind = measurement` and `fitage_metric = weight`.
+
+### Upgrading from v1.2
+
+The registry migration runs automatically. Existing entity IDs, history, custom names, device links, and enabled or hidden settings are preserved. An entity such as `sensor.melissa_weight_2` may therefore still have that name after upgrading. This is normal: suffixes such as `_2` are retained for compatibility but are no longer part of the entity's stable technical identity. Existing dashboards do not need to be changed solely because of this migration.
+
+If Home Assistant detects the rare case where the new identity is already occupied, it stops the migration safely instead of overwriting an entity. Legacy Feelfit registry entries are not automatically removed.
+
 ## FITAGE assessments
 
 Assessment categories reconstructed from the official FITAGE app logic appear as attributes on the existing measurement sensors; the integration does not create extra assessment entities. Some limits depend on gender and region. Height-dependent assessments use the historical height stored with that specific measurement, never the current profile height. Assessments are omitted when a required input or a reliably identified supported region is unavailable.

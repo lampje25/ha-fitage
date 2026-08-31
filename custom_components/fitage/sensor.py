@@ -7,7 +7,11 @@ import math
 from datetime import datetime
 from typing import Any
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -18,7 +22,14 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .assessment import assess_measurement
-from .const import DOMAIN, LOGGER, SCAN_INTERVAL
+from .const import (
+    DOMAIN,
+    GOAL_METRICS,
+    LOGGER,
+    MEASUREMENT_METRICS,
+    PROFILE_METRICS,
+    SCAN_INTERVAL,
+)
 
 _LOGGER = logging.getLogger(LOGGER)
 
@@ -55,6 +66,58 @@ _CALCULATED_MEASUREMENT_KEYS = {
     "weight_control",
     "recommended_weight",
 }
+
+_PROFILE_UNITS = {"weight": KG_UNIT, "height": "cm"}
+_PROFILE_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = tuple(
+    SensorEntityDescription(
+        key=key,
+        translation_key=key,
+        native_unit_of_measurement=_PROFILE_UNITS.get(key),
+    )
+    for key in PROFILE_METRICS
+)
+
+_GOAL_UNITS = {"weight": KG_UNIT, "bodyfat": PERCENT, "water": "ml"}
+_STANDARD_GOAL_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = tuple(
+    SensorEntityDescription(
+        key=key,
+        translation_key=f"goal_{key}",
+        native_unit_of_measurement=_GOAL_UNITS.get(key),
+    )
+    for key in GOAL_METRICS
+)
+
+_MEASUREMENT_UNITS = {
+    "weight": KG_UNIT,
+    "bodyfat": PERCENT,
+    "bmr": KCAL,
+    "bodyage": "y",
+    "fat_free_weight": KG_UNIT,
+    "muscle": PERCENT,
+    "protein": PERCENT,
+    "sinew": KG_UNIT,
+    "subfat": PERCENT,
+    "water": PERCENT,
+    "bone": KG_UNIT,
+    "heart_rate": BPM,
+    "body_water_mass": KG_UNIT,
+    "protein_mass": KG_UNIT,
+    "body_fat_mass": KG_UNIT,
+    "muscle_ratio": PERCENT,
+    "bone_ratio": PERCENT,
+    "muscle_control": KG_UNIT,
+    "fat_control": KG_UNIT,
+    "weight_control": KG_UNIT,
+    "recommended_weight": KG_UNIT,
+}
+_MEASUREMENT_SENSOR_DESCRIPTIONS: tuple[SensorEntityDescription, ...] = tuple(
+    SensorEntityDescription(
+        key=key,
+        translation_key=f"measurement_{key}",
+        native_unit_of_measurement=_MEASUREMENT_UNITS.get(key),
+    )
+    for key in MEASUREMENT_METRICS
+)
 
 
 def _as_finite_float(value: Any) -> float | None:
@@ -247,6 +310,50 @@ def _format_birthday(raw_birthday: Any, date_format: str | None) -> str | None:
         return str(raw_birthday)
 
 
+def _create_profile_entities(
+    coordinator: DataUpdateCoordinator[dict[str, Any]],
+    profile_data: dict[str, Any],
+) -> list[SensorEntity]:
+    """Create the stable supported entity set for one FITAGE profile."""
+    user_info = profile_data.get("user_info") or {}
+    profile_user_id = str(user_info.get("user_id", ""))
+    if not profile_user_id:
+        return []
+
+    profile_entities: list[SensorEntity] = []
+    for description in _PROFILE_SENSOR_DESCRIPTIONS:
+        if description.key == "birthday":
+            profile_entities.append(
+                FeelfitBirthdaySensor(coordinator, description, profile_user_id)
+            )
+        else:
+            profile_entities.append(
+                FeelfitUserSensor(coordinator, description, profile_user_id)
+            )
+
+    goal_descriptions = {
+        description.key: description for description in _STANDARD_GOAL_DESCRIPTIONS
+    }
+    for goal in (profile_data.get("goals") or {}).get("goals") or []:
+        goal_type = goal.get("goal_type")
+        if not goal_type:
+            continue
+        goal_key = str(goal_type).strip().lower()
+        if goal_key not in goal_descriptions:
+            goal_descriptions[goal_key] = SensorEntityDescription(
+                key=goal_key, translation_key=f"goal_{goal_key}"
+            )
+    profile_entities.extend(
+        FeelfitGoalSensor(coordinator, description, profile_user_id)
+        for description in goal_descriptions.values()
+    )
+    profile_entities.extend(
+        FeelfitMeasurementSensor(coordinator, description, profile_user_id)
+        for description in _MEASUREMENT_SENSOR_DESCRIPTIONS
+    )
+    return profile_entities
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -281,12 +388,12 @@ async def async_setup_entry(
                     )
                 except Exception:  # Assessment failure must never break sensor states.
                     profile_data["assessments"] = {}
-                    _LOGGER.exception("Unable to calculate FITAGE assessments")
+                    _LOGGER.error("Unable to calculate FITAGE assessments")
             _LOGGER.debug("FITAGE coordinator fetched keys: %s", list(payload.keys()))
             return payload
         except Exception as err:
-            _LOGGER.debug("FITAGE coordinator update failed: %s", err)
-            raise UpdateFailed(f"FITAGE fetch failed: {err}") from err
+            _LOGGER.debug("FITAGE coordinator update failed")
+            raise UpdateFailed("FITAGE fetch failed") from err
 
     coordinator: DataUpdateCoordinator[dict[str, Any]] = DataUpdateCoordinator(
         hass,
@@ -304,179 +411,24 @@ async def async_setup_entry(
 
     entities: list[SensorEntity] = []
 
+    profile_ids = {
+        str((profile.get("user_info") or {}).get("user_id", "")) for profile in profiles
+    }
+    expected_profile_ids = selected_profiles or ([str(user_id)] if user_id else [])
+    profiles.extend(
+        {"user_info": {"user_id": str(selected_user_id)}}
+        for selected_user_id in expected_profile_ids
+        if str(selected_user_id) not in profile_ids
+    )
+
     for profile_data in profiles:
         user_info = profile_data.get("user_info") or {}
         profile_user_id = str(user_info.get("user_id", ""))
-        account_name = user_info.get("account_name") or "Unknown"
-        is_primary = user_info.get("is_primary", True)
+        if not profile_user_id:
+            _LOGGER.warning("Skipping FITAGE profile without a user_id")
+            continue
 
-        prefix = "" if is_primary else f"{account_name.lower().replace(' ', '_')}_"
-        display_prefix = "" if is_primary else f"{account_name} - "
-
-        _LOGGER.debug(
-            "Creating sensors for profile: %s (user_id=%s, is_primary=%s, prefix=%s)",
-            account_name,
-            profile_user_id,
-            is_primary,
-            prefix,
-        )
-
-        if user_info:
-            entities.append(
-                FeelfitUserSensor(
-                    coordinator,
-                    entry.entry_id,
-                    f"{prefix}account_name",
-                    "account_name",
-                    f"{display_prefix}Account Name",
-                    None,
-                    profile_user_id,
-                )
-            )
-            if user_info.get("weight") is not None:
-                entities.append(
-                    FeelfitUserSensor(
-                        coordinator,
-                        entry.entry_id,
-                        f"{prefix}weight",
-                        "weight",
-                        f"{display_prefix}Weight",
-                        KG_UNIT,
-                        profile_user_id,
-                    )
-                )
-            if user_info.get("height") is not None:
-                entities.append(
-                    FeelfitUserSensor(
-                        coordinator,
-                        entry.entry_id,
-                        f"{prefix}height",
-                        "height",
-                        f"{display_prefix}Height",
-                        "cm",
-                        profile_user_id,
-                    )
-                )
-            if "birthday" in user_info:
-                entities.append(
-                    FeelfitBirthdaySensor(
-                        coordinator,
-                        entry.entry_id,
-                        f"{prefix}birthday",
-                        "birthday",
-                        f"{display_prefix}Birthday",
-                        profile_user_id,
-                    )
-                )
-            if user_info.get("email"):
-                entities.append(
-                    FeelfitUserSensor(
-                        coordinator,
-                        entry.entry_id,
-                        f"{prefix}email",
-                        "email",
-                        f"{display_prefix}Email",
-                        None,
-                        profile_user_id,
-                    )
-                )
-
-        goals_payload = profile_data.get("goals") or {}
-        goals_list = goals_payload.get("goals") or []
-        _LOGGER.debug(
-            "Profile %s: Processing %d goals",
-            user_info.get("account_name"),
-            len(goals_list),
-        )
-        for g in goals_list:
-            g_type = g.get("goal_type")
-            _LOGGER.debug(
-                "Profile %s goal: type=%s, value=%s, full_data=%s",
-                user_info.get("account_name"),
-                g_type,
-                g.get("goal_value"),
-                g,
-            )
-            if not g_type:
-                _LOGGER.warning(
-                    "Skipping goal with missing goal_type for profile %s: %s",
-                    user_info.get("account_name"),
-                    g,
-                )
-                continue
-            unique_key = f"{prefix}goal_{g_type}"
-            translation_key = f"goal_{g_type}"
-            unit: str | None = None
-            if g_type == "weight":
-                unit = KG_UNIT
-            elif g_type == "bodyfat":
-                unit = PERCENT
-            elif g_type == "water":
-                unit = "ml"
-            entities.append(
-                FeelfitGoalSensor(
-                    coordinator,
-                    entry.entry_id,
-                    unique_key,
-                    translation_key,
-                    g_type,
-                    unit,
-                    profile_user_id,
-                )
-            )
-
-        measurements_payload = profile_data.get("measurements") or {}
-        last_measurement = measurements_payload.get("last_measurement")
-
-        if last_measurement:
-            measurement_keys: list[tuple[str, str, str | None]] = [
-                ("weight", "Weight", KG_UNIT),
-                ("bodyfat", "Bodyfat", PERCENT),
-                ("bmi", "BMI", None),
-                ("bmr", "BMR", KCAL),
-                ("bodyage", "Metabolic Age", "y"),
-                ("fat_free_weight", "Fat Free Weight", KG_UNIT),
-                ("muscle", "Muscle (%)", PERCENT),
-                ("protein", "Protein (%)", PERCENT),
-                ("sinew", "Sinew", KG_UNIT),
-                ("subfat", "Subcutaneous Fat (%)", PERCENT),
-                ("visfat", "Visceral Fat", None),
-                ("water", "Hydration (%)", PERCENT),
-                ("bone", "Bone Mass", KG_UNIT),
-                ("heart_rate", "Heart Rate", BPM),
-                ("score", "Score", None),
-                ("time_stamp", "Measurement Timestamp", None),
-                ("body_water_mass", "Body Water Mass", KG_UNIT),
-                ("protein_mass", "Protein Mass", KG_UNIT),
-                ("body_fat_mass", "Body Fat Mass", KG_UNIT),
-                ("muscle_ratio", "Muscle Ratio", PERCENT),
-                ("bone_ratio", "Bone Ratio", PERCENT),
-                ("muscle_storage_capacity", "Muscle Storage Capacity", None),
-                ("body_shape", "Body Shape", None),
-                ("muscle_control", "Muscle Control", KG_UNIT),
-                ("fat_control", "Fat Control", KG_UNIT),
-                ("weight_control", "Weight Control", KG_UNIT),
-                ("recommended_weight", "Recommended Weight", KG_UNIT),
-            ]
-
-            seen: set[str] = set()
-            for key, label, unit in measurement_keys:
-                if key in seen:
-                    continue
-                seen.add(key)
-                unique = f"{prefix}measurement_{key}"
-                name = f"{display_prefix}{label}"
-                entities.append(
-                    FeelfitMeasurementSensor(
-                        coordinator,
-                        entry.entry_id,
-                        unique,
-                        name,
-                        unit,
-                        measurement_key=key,
-                        profile_user_id=profile_user_id,
-                    )
-                )
+        entities.extend(_create_profile_entities(coordinator, profile_data))
 
     device_binds = (device_binds_payload or {}).get("device_binds") or []
     for idx, d in enumerate(device_binds):
@@ -492,293 +444,173 @@ async def async_setup_entry(
     async_add_entities(entities, True)
 
 
-class FeelfitUserSensor(
+class FeelfitProfileEntity(
     CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity
 ):
+    """Base class for an entity belonging to exactly one FITAGE profile."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator[dict[str, Any]],
+        profile_user_id: str,
+        entity_kind: str,
+        metric: str,
+    ) -> None:
+        """Initialize canonical identity shared by profile entities."""
+        super().__init__(coordinator)
+        self._profile_user_id = str(profile_user_id)
+        self._entity_kind = entity_kind
+        self._metric = metric
+        self._attr_unique_id = (
+            f"{self._profile_user_id}_{self._entity_kind}_{self._metric}"
+        )
+
+    @property
+    def _profile_data(self) -> dict[str, Any] | None:
+        """Return only the profile matching this entity's user ID."""
+        for profile_data in (self.coordinator.data or {}).get("profiles") or []:
+            profile_info = profile_data.get("user_info") or {}
+            if str(profile_info.get("user_id", "")) == self._profile_user_id:
+                return profile_data
+        return None
+
+    @property
+    def available(self) -> bool:
+        """Return whether this entity's profile source is available."""
+        return super().available and self._profile_data is not None
+
+    @property
+    def _fitage_metadata(self) -> dict[str, str]:
+        """Return stable metadata for generic entity discovery."""
+        return {
+            "fitage_user_id": self._profile_user_id,
+            "fitage_entity_kind": self._entity_kind,
+            "fitage_metric": self._metric,
+        }
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Return the unchanged profile device identity."""
+        profile_data = self._profile_data or {}
+        user_info = profile_data.get("user_info") or {}
+        return {
+            "identifiers": {(DOMAIN, f"user_{self._profile_user_id}")},
+            "name": user_info.get("account_name")
+            or f"FITAGE User {self._profile_user_id}",
+            "manufacturer": "FITAGE",
+            "model": "FITAGE Account",
+        }
+
+
+class FeelfitUserSensor(FeelfitProfileEntity):
     """Sensor for user info attributes."""
 
     def __init__(
         self,
         coordinator: DataUpdateCoordinator[dict[str, Any]],
-        entry_id: str,
-        unique_key: str,
-        attr_key: str,
-        name: str,
-        unit: str | None,
-        profile_user_id: str | None = None,
+        description: SensorEntityDescription,
+        profile_user_id: str,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-        self._attr_key = attr_key
-        self._name = name
-        self._unit = unit
-        self._profile_user_id = profile_user_id
-
-        self._unique_id = f"{entry_id}_{unique_key}_{profile_user_id or 'primary'}"
-        self._attr_translation_key = attr_key
-        self._attr_has_entity_name = True
-
-    @property
-    def unique_id(self) -> str:
-        """Return unique ID."""
-        return self._unique_id
-
-    @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Return unit of measurement."""
-        return self._unit
+        self.entity_description = description
+        super().__init__(coordinator, profile_user_id, "profile", description.key)
+        self._attr_key = description.key
 
     @property
     def native_value(self) -> Any:
-        """Return sensor value."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
-
-        user_info = None
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
-            ):
-                user_info = profile_info
-                break
-
-        if not user_info and profiles:
-            user_info = profiles[0].get("user_info") or {}
-
-        if not user_info:
+        """Return the profile value without cross-profile fallback."""
+        profile_data = self._profile_data
+        if profile_data is None:
             return None
-
-        return user_info.get(self._attr_key)
+        return (profile_data.get("user_info") or {}).get(self._attr_key)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra attributes."""
-        return {"source": "fitage", "attribute": self._attr_key}
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Return device info."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
-
-        user_info = None
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
-            ):
-                user_info = profile_info
-                break
-
-        if not user_info and profiles:
-            user_info = profiles[0].get("user_info") or {}
-
-        if not user_info:
-            user_info = {}
-
-        user_id = user_info.get("user_id") or self._entry_id
         return {
-            "identifiers": {(DOMAIN, f"user_{user_id}")},
-            "name": user_info.get("account_name") or f"FITAGE User {user_id}",
-            "manufacturer": "FITAGE",
-            "model": "FITAGE Account",
+            **self._fitage_metadata,
+            "source": "fitage",
+            "attribute": self._attr_key,
         }
 
 
-class FeelfitBirthdaySensor(
-    CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity
-):
+class FeelfitBirthdaySensor(FeelfitProfileEntity):
     """Sensor for birthday with date formatting."""
 
     def __init__(
         self,
         coordinator: DataUpdateCoordinator[dict[str, Any]],
-        entry_id: str,
-        unique_key: str,
-        attr_key: str,
-        name: str,
-        profile_user_id: str | None = None,
+        description: SensorEntityDescription,
+        profile_user_id: str,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-        self._attr_key = attr_key
-        self._name = name
-        self._profile_user_id = profile_user_id
-
-        self._unique_id = f"{entry_id}_{unique_key}_{profile_user_id or 'primary'}"
-        self._attr_translation_key = attr_key
-        self._attr_has_entity_name = True
-
-    @property
-    def unique_id(self) -> str:
-        """Return unique ID."""
-        return self._unique_id
+        self.entity_description = description
+        super().__init__(coordinator, profile_user_id, "profile", description.key)
 
     @property
     def native_value(self) -> str | None:
-        """Return formatted birthday."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
-
-        user_info = None
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
-            ):
-                user_info = profile_info
-                user_settings = profile_data.get("user_settings") or {}
-                break
-
-        if not user_info and profiles:
-            user_info = profiles[0].get("user_info") or {}
-            user_settings = profiles[0].get("user_settings") or {}
-        elif not user_info:
+        """Return the formatted birthday for this profile only."""
+        profile_data = self._profile_data
+        if profile_data is None:
             return None
-
-        raw = user_info.get("birthday")
-        fmt = user_settings.get("date_format")
-        return _format_birthday(raw, fmt)
+        user_info = profile_data.get("user_info") or {}
+        user_settings = profile_data.get("user_settings") or {}
+        return _format_birthday(
+            user_info.get("birthday"), user_settings.get("date_format")
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra attributes."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
-
-        user_settings = {}
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
-            ):
-                user_settings = profile_data.get("user_settings") or {}
-                break
-
+        profile_data = self._profile_data or {}
+        user_settings = profile_data.get("user_settings") or {}
         return {
+            **self._fitage_metadata,
             "source": "fitage",
-            "attribute": self._attr_key,
+            "attribute": "birthday",
             "date_format": user_settings.get("date_format"),
         }
 
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Return device info."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
 
-        user_info = None
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
-            ):
-                user_info = profile_info
-                break
-
-        if not user_info and profiles:
-            user_info = profiles[0].get("user_info") or {}
-
-        if not user_info:
-            user_info = {}
-        user_id = user_info.get("user_id") or self._entry_id
-        return {
-            "identifiers": {(DOMAIN, f"user_{user_id}")},
-            "name": user_info.get("account_name") or f"FITAGE User {user_id}",
-            "manufacturer": "FITAGE",
-            "model": "FITAGE Account",
-        }
-
-
-class FeelfitGoalSensor(
-    CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity
-):
+class FeelfitGoalSensor(FeelfitProfileEntity):
     """Sensor for goal values."""
 
     def __init__(
         self,
         coordinator: DataUpdateCoordinator[dict[str, Any]],
-        entry_id: str,
-        unique_key: str,
-        translation_key: str,
-        goal_type: str,
-        unit: str | None,
-        profile_user_id: str | None = None,
+        description: SensorEntityDescription,
+        profile_user_id: str,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-
-        self._unique_id = f"{entry_id}_{unique_key}_{profile_user_id or 'primary'}"
-        self._unit = unit
-        self._goal_type = goal_type
-        self._profile_user_id = profile_user_id
-        self._attr_translation_key = translation_key
-        self._attr_has_entity_name = True
-
-    @property
-    def unique_id(self) -> str:
-        """Return unique ID."""
-        return self._unique_id
-
-    @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Return unit of measurement."""
-        return self._unit
+        self.entity_description = description
+        super().__init__(coordinator, profile_user_id, "goal", description.key)
+        self._goal_type = description.key
 
     @property
     def native_value(self) -> Any:
-        """Return goal value."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
-
-        goals_list = []
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
+        """Return 0, None, or another goal value without conflating them."""
+        profile_data = self._profile_data
+        if profile_data is None:
+            return None
+        goals_payload = profile_data.get("goals") or {}
+        for goal in goals_payload.get("goals") or []:
+            goal_type = goal.get("goal_type")
+            if (
+                goal_type is not None
+                and str(goal_type).strip().lower() == self._goal_type
             ):
-                goals_payload = profile_data.get("goals") or {}
-                goals_list = goals_payload.get("goals") or []
-                break
-
-        if not goals_list and profiles:
-            goals_payload = profiles[0].get("goals") or {}
-            goals_list = goals_payload.get("goals") or []
-
-        for g in goals_list:
-            if g.get("goal_type") == self._goal_type:
-                return g.get("goal_value")
+                return goal.get("goal_value")
         return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return extra attributes."""
-        return {"source": "fitage", "goal_type": self._goal_type}
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Return device info."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
-
-        user_info = None
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
-            ):
-                user_info = profile_info
-                break
-
-        if not user_info and profiles:
-            user_info = profiles[0].get("user_info") or {}
-
-        if not user_info:
-            user_info = {}
-
-        user_id = user_info.get("user_id") or self._entry_id
         return {
-            "identifiers": {(DOMAIN, f"user_{user_id}")},
-            "name": user_info.get("account_name") or f"FITAGE User {user_id}",
-            "manufacturer": "FITAGE",
-            "model": "FITAGE Account",
+            **self._fitage_metadata,
+            "source": "fitage",
+            "goal_type": self._goal_type,
         }
 
 
@@ -910,42 +742,19 @@ class FeelfitDeviceSensor(
         }
 
 
-class FeelfitMeasurementSensor(
-    CoordinatorEntity[DataUpdateCoordinator[dict[str, Any]]], SensorEntity
-):
+class FeelfitMeasurementSensor(FeelfitProfileEntity):
     """Sensor for measurement values."""
 
     def __init__(
         self,
         coordinator: DataUpdateCoordinator[dict[str, Any]],
-        entry_id: str,
-        unique_key: str,
-        name: str,
-        unit: str | None,
-        measurement_key: str,
-        profile_user_id: str | None = None,
+        description: SensorEntityDescription,
+        profile_user_id: str,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-
-        self._unique_id = f"{entry_id}_{unique_key}_{profile_user_id or 'primary'}"
-        self._name = name
-        self._unit = unit
-        self._measurement_key = measurement_key
-        self._profile_user_id = profile_user_id
-        self._attr_translation_key = f"measurement_{measurement_key}"
-        self._attr_has_entity_name = True
-
-    @property
-    def unique_id(self) -> str:
-        """Return unique ID."""
-        return self._unique_id
-
-    @property
-    def native_unit_of_measurement(self) -> str | None:
-        """Return unit of measurement."""
-        return self._unit
+        self.entity_description = description
+        super().__init__(coordinator, profile_user_id, "measurement", description.key)
+        self._measurement_key = description.key
 
     @property
     def device_class(self) -> SensorDeviceClass | None:
@@ -963,21 +772,11 @@ class FeelfitMeasurementSensor(
 
     @property
     def native_value(self) -> Any:
-        """Return measurement value."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
-
-        measurement = None
-        measurement_user_info: dict[str, Any] = {}
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
-            ):
-                measurements_payload = profile_data.get("measurements") or {}
-                measurement = measurements_payload.get("last_measurement")
-                measurement_user_info = profile_info
-                break
-
+        """Return the measurement value for this profile only."""
+        profile_data = self._profile_data
+        if profile_data is None:
+            return None
+        measurement = (profile_data.get("measurements") or {}).get("last_measurement")
         if not measurement:
             _LOGGER.debug(
                 "FITAGE measurement sensor: no measurement for key %s",
@@ -985,6 +784,7 @@ class FeelfitMeasurementSensor(
             )
             return None
 
+        measurement_user_info = profile_data.get("user_info") or {}
         if self._measurement_key in _CALCULATED_MEASUREMENT_KEYS:
             return _calculate_fitage_metrics(measurement, measurement_user_info).get(
                 self._measurement_key
@@ -998,7 +798,7 @@ class FeelfitMeasurementSensor(
         }
         if percentage_key := mass_percentage_keys.get(self._measurement_key):
             mass = _as_finite_float(raw_val)
-            if mass is not None and mass > 0:
+            if mass is not None:
                 raw_val = mass
             else:
                 weight = _as_finite_float(measurement.get("weight"))
@@ -1052,64 +852,28 @@ class FeelfitMeasurementSensor(
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra attributes."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
+        """Return FITAGE and assessment attributes."""
+        attrs: dict[str, Any] = dict(self._fitage_metadata)
+        profile_data = self._profile_data
+        if profile_data is None:
+            return attrs
+        measurement = (profile_data.get("measurements") or {}).get("last_measurement")
+        if not measurement:
+            return attrs
 
-        measurement = None
-        assessment_attributes: dict[str, Any] = {}
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
-            ):
-                measurements_payload = profile_data.get("measurements") or {}
-                measurement = measurements_payload.get("last_measurement")
-                assessment_attributes = (profile_data.get("assessments") or {}).get(
-                    self._measurement_key, {}
-                )
-                break
-
-        attrs: dict[str, Any] = {}
-        if measurement:
-            for k in (
-                "measurement_id",
-                "user_id",
-                "scale_name",
-                "internal_model",
-                "mac",
-                "parameter",
-                "accuracy_flag",
-                "measure_mode_flags",
-            ):
-                if k in measurement:
-                    attrs[k] = measurement.get(k)
-            attrs.update(assessment_attributes)
+        for key in (
+            "measurement_id",
+            "user_id",
+            "scale_name",
+            "internal_model",
+            "mac",
+            "parameter",
+            "accuracy_flag",
+            "measure_mode_flags",
+        ):
+            if key in measurement:
+                attrs[key] = measurement.get(key)
+        attrs.update(
+            (profile_data.get("assessments") or {}).get(self._measurement_key, {})
+        )
         return attrs
-
-    @property
-    def device_info(self) -> dict[str, Any]:
-        """Return device info."""
-        profiles = (self.coordinator.data or {}).get("profiles") or []
-
-        user_info = None
-        for profile_data in profiles:
-            profile_info = profile_data.get("user_info") or {}
-            if self._profile_user_id and str(profile_info.get("user_id")) == str(
-                self._profile_user_id
-            ):
-                user_info = profile_info
-                break
-
-        if not user_info and profiles:
-            user_info = profiles[0].get("user_info") or {}
-
-        if not user_info:
-            user_info = {}
-
-        user_id = user_info.get("user_id") or self._entry_id
-        return {
-            "identifiers": {(DOMAIN, f"user_{user_id}")},
-            "name": user_info.get("account_name") or f"FITAGE User {user_id}",
-            "manufacturer": "FITAGE",
-            "model": "FITAGE Account",
-        }

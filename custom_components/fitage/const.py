@@ -11,6 +11,38 @@ SCAN_INTERVAL = timedelta(seconds=120)
 CONF_SELECTED_PROFILES = "selected_profiles"
 CONF_PROFILES_LIST = "profiles_list"
 
+PROFILE_METRICS = ("account_name", "weight", "height", "birthday", "email")
+GOAL_METRICS = ("weight", "bodyfat", "water")
+MEASUREMENT_METRICS = (
+    "weight",
+    "bodyfat",
+    "bmi",
+    "bmr",
+    "bodyage",
+    "fat_free_weight",
+    "muscle",
+    "protein",
+    "sinew",
+    "subfat",
+    "visfat",
+    "water",
+    "bone",
+    "heart_rate",
+    "score",
+    "time_stamp",
+    "body_water_mass",
+    "protein_mass",
+    "body_fat_mass",
+    "muscle_ratio",
+    "bone_ratio",
+    "muscle_storage_capacity",
+    "body_shape",
+    "muscle_control",
+    "fat_control",
+    "weight_control",
+    "recommended_weight",
+)
+
 API_BASE = "https://fitage.qnclouds.com/api/v4"
 
 DEFAULT_QUERY_PARAMS: dict[str, str] = {

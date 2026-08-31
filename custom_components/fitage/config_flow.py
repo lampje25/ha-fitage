@@ -39,6 +39,7 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for FITAGE."""
 
     VERSION = 1
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -58,11 +59,11 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 login_data = await validate_input(self.hass, user_input)
-            except FeelfitApiError as exc:
-                _LOGGER.debug("Login attempt failed: %s", exc)
+            except FeelfitApiError:
+                _LOGGER.debug("Login attempt failed")
                 errors["base"] = "invalid_auth"
             except Exception:
-                _LOGGER.exception("Unexpected exception")
+                _LOGGER.error("Unexpected login error")
                 errors["base"] = "unknown"
             else:
                 self._user_info = login_data.get("user_info", {})
@@ -81,18 +82,8 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 try:
                     self._all_profiles = await client.async_list_all_profiles()
                     _LOGGER.debug("Found %d profiles", len(self._all_profiles))
-                    for idx, p in enumerate(self._all_profiles):
-                        _LOGGER.debug(
-                            "Profile %d: user_id=%s, account_name=%s, nickname=%s, email=%s, is_primary=%s",
-                            idx + 1,
-                            p.get("user_id"),
-                            p.get("account_name"),
-                            p.get("nickname"),
-                            p.get("email"),
-                            p.get("is_primary"),
-                        )
-                except Exception as exc:
-                    _LOGGER.error("Failed to fetch profiles: %s", exc)
+                except Exception:
+                    _LOGGER.error("Failed to fetch profiles")
                     self._all_profiles = [self._user_info]
 
                 return await self.async_step_select_profiles()
@@ -161,8 +152,6 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if email:
                 label += f" - {email}"
 
-            _LOGGER.debug("Profile in UI: user_id=%s, label=%s", user_id, label)
-
             profiles_schema[
                 vol.Optional(
                     label,
@@ -230,7 +219,7 @@ class FeelfitOptionsFlowHandler(config_entries.OptionsFlow):
             self._all_profiles = await api.async_list_all_profiles()
 
         except Exception:
-            _LOGGER.exception("Failed to fetch profiles in options")
+            _LOGGER.error("Failed to fetch profiles in options")
             return self.async_abort(reason="fetch_failed")
 
         if user_input is not None:
@@ -273,13 +262,6 @@ class FeelfitOptionsFlowHandler(config_entries.OptionsFlow):
                 label += f" - {email_addr}"
 
             is_selected = user_id in current_selection
-
-            _LOGGER.debug(
-                "Options profile: user_id=%s, label=%s, selected=%s",
-                user_id,
-                label,
-                is_selected,
-            )
 
             profiles_schema[vol.Optional(label, default=is_selected)] = (
                 selector.BooleanSelector()

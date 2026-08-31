@@ -72,18 +72,18 @@ class FeelfitApi:
             ) as resp:
                 text = await resp.text()
                 if resp.status != 200:
-                    _LOGGER.error("Login HTTP error %s: %s", resp.status, text)
+                    _LOGGER.error("Login HTTP error %s", resp.status)
                     raise FeelfitApiError(f"HTTP {resp.status}: {text}")
                 result = await resp.json(content_type=None)
         except FeelfitApiError:
             raise
         except Exception as exc:
-            _LOGGER.exception("Error while calling FITAGE login endpoint")
+            _LOGGER.error("Error while calling FITAGE login endpoint")
             raise FeelfitApiError(str(exc)) from exc
 
         if str(result.get("code")) not in ("200", "0"):
-            _LOGGER.error("Login failed: %s", result)
-            raise FeelfitApiError(f"Login failed: {result}")
+            _LOGGER.error("Login failed")
+            raise FeelfitApiError("Login failed")
 
         data = result.get("data") or {}
         token_info = data.get("token_info") or {}
@@ -95,7 +95,7 @@ class FeelfitApi:
             self.token_expires = time.time() + float(remaining or 0)
 
         self.user_info = data.get("user_info") or {}
-        _LOGGER.debug("Login success user_id=%s", self.user_info.get("user_id"))
+        _LOGGER.debug("Login succeeded")
         return data
 
     def _encrypt_password(self, password: str) -> str:
@@ -123,13 +123,13 @@ class FeelfitApi:
             async with self._session.get(url, headers=headers, timeout=timeout) as resp:
                 text = await resp.text()
                 if resp.status != 200:
-                    _LOGGER.error("GET %s returned %s: %s", url, resp.status, text)
+                    _LOGGER.error("FITAGE request returned HTTP %s", resp.status)
                     raise FeelfitApiError(f"HTTP {resp.status}: {text}")
                 result = await resp.json(content_type=None)
         except FeelfitApiError:
             raise
         except Exception as exc:
-            _LOGGER.exception("Error while GET %s", url)
+            _LOGGER.error("Error while calling a FITAGE endpoint")
             raise FeelfitApiError(str(exc)) from exc
 
         if isinstance(result, dict) and "data" in result:
@@ -183,19 +183,12 @@ class FeelfitApi:
                         if primary_user.get("email")
                         else "Profilo Primario"
                     )
-                _LOGGER.debug(
-                    "Primary profile: user_id=%s, account_name=%s",
-                    primary_user.get("user_id"),
-                    primary_user.get("account_name"),
-                )
                 profiles.append(primary_user)
-        except Exception as exc:
-            _LOGGER.error("Failed to fetch primary user: %s", exc)
+        except Exception:
+            _LOGGER.error("Failed to fetch primary user")
 
         try:
             sub_users_data = await self._get("/sub_users/list_sub_user")
-
-            _LOGGER.debug("Sub users response: %s", sub_users_data)
 
             sub_users = []
             if isinstance(sub_users_data, dict):
@@ -222,22 +215,12 @@ class FeelfitApi:
                         if user.get("email")
                         else f"Profilo {idx + 2}"
                     )
-                _LOGGER.debug(
-                    "Sub user %d: user_id=%s, account_name=%s",
-                    idx + 1,
-                    user.get("user_id"),
-                    user.get("account_name"),
-                )
                 profiles.append(user)
 
-        except Exception as exc:
-            _LOGGER.warning("Failed to fetch sub users (might not exist): %s", exc)
+        except Exception:
+            _LOGGER.warning("Failed to fetch sub users; they might not exist")
 
-        _LOGGER.info(
-            "Found %d profiles total: %s",
-            len(profiles),
-            [f"{p.get('account_name')} (id={p.get('user_id')})" for p in profiles],
-        )
+        _LOGGER.info("Found %d profiles total", len(profiles))
         return profiles
 
     async def async_get_last_measurements(
@@ -273,8 +256,8 @@ class FeelfitApi:
             primary_data = await self.async_get_primary_user()
             if isinstance(primary_data, dict) and "user_info" in primary_data:
                 self.user_info = primary_data.get("user_info") or self.user_info
-        except Exception as exc:
-            _LOGGER.debug("Could not fetch profiles: %s", exc)
+        except Exception:
+            _LOGGER.debug("Could not fetch profiles")
 
         if selected_profiles:
             profiles_to_fetch = [
@@ -293,7 +276,7 @@ class FeelfitApi:
 
         for profile in profiles_to_fetch:
             profile_user_id = str(profile.get("user_id"))
-            _LOGGER.debug("Fetching data for profile: %s", profile.get("account_name"))
+            _LOGGER.debug("Fetching data for a selected profile")
 
             last_known_meta = self._last_measurements_meta.get(profile_user_id, {})
             last_known_updated_at = int(last_known_meta.get("last_updated_at") or 0)
@@ -316,15 +299,6 @@ class FeelfitApi:
                 last_known_meta.get("last_measurement_id", 0) or 0
             )
 
-            _LOGGER.debug(
-                "Profile %s measurements fetch: last_known=%s primary_ts=%s request=%s measurement_id=%s",
-                profile.get("account_name"),
-                last_known_updated_at,
-                primary_ts,
-                request_last_updated_at,
-                last_measurement_id,
-            )
-
             tasks = [
                 self.async_get_user_settings(),
                 self.async_list_goals(profile_user_id),
@@ -342,12 +316,7 @@ class FeelfitApi:
 
             for idx, res in enumerate(results):
                 if isinstance(res, Exception):
-                    _LOGGER.error(
-                        "Error fetching index %s for profile %s: %s",
-                        idx,
-                        profile.get("account_name"),
-                        res,
-                    )
+                    _LOGGER.error("Failed to fetch profile data item %s", idx)
                     continue
                 if idx == 0:
                     user_settings = res or {}
@@ -363,8 +332,7 @@ class FeelfitApi:
                 and primary_ts != last_known_updated_at
             ):
                 _LOGGER.debug(
-                    "Profile %s measurements empty, retrying with last_updated_at=0 as fallback",
-                    profile.get("account_name"),
+                    "Measurements empty; retrying without incremental metadata"
                 )
                 try:
                     fallback = await self.async_get_last_measurements(
@@ -372,12 +340,8 @@ class FeelfitApi:
                     )
                     measurements_data = fallback or {}
                     measurements_list = measurements_data.get("measurements") or []
-                except Exception as exc:
-                    _LOGGER.debug(
-                        "Fallback measurements fetch failed for profile %s: %s",
-                        profile.get("account_name"),
-                        exc,
-                    )
+                except Exception:
+                    _LOGGER.debug("Fallback measurements fetch failed")
 
             try:
                 returned_last_updated_at = int(
@@ -399,17 +363,9 @@ class FeelfitApi:
                         "last_measurement_id"
                     ] = returned_last_measurement_id
 
-                _LOGGER.debug(
-                    "Updated measurements meta for profile %s: %s",
-                    profile.get("account_name"),
-                    self._last_measurements_meta[profile_user_id],
-                )
+                _LOGGER.debug("Updated incremental measurement metadata")
             except (ValueError, TypeError):
-                _LOGGER.debug(
-                    "Could not update measurements meta for profile %s from response: %s",
-                    profile.get("account_name"),
-                    measurements_data,
-                )
+                _LOGGER.debug("Could not update incremental measurement metadata")
 
             last_measurement = measurements_list[0] if measurements_list else None
             profile_data = {
@@ -427,8 +383,8 @@ class FeelfitApi:
         device_binds_data: dict[str, Any] = {}
         try:
             device_binds_data = await self.async_list_device_binds()
-        except Exception as exc:
-            _LOGGER.error("Error fetching device binds: %s", exc)
+        except Exception:
+            _LOGGER.error("Error fetching device binds")
 
         device_binds = device_binds_data.get("device_binds") or []
         device_models = device_binds_data.get("device_models") or []
@@ -477,8 +433,8 @@ class FeelfitApi:
             primary_data = await self.async_get_primary_user()
             if isinstance(primary_data, dict) and "user_info" in primary_data:
                 self.user_info = primary_data.get("user_info") or self.user_info
-        except Exception as exc:
-            _LOGGER.debug("Could not fetch primary user: %s", exc)
+        except Exception:
+            _LOGGER.debug("Could not fetch primary user")
 
         last_known_meta = self._last_measurements_meta or {}
         last_known_updated_at = int(last_known_meta.get("last_updated_at") or 0)
@@ -506,14 +462,6 @@ class FeelfitApi:
 
         last_measurement_id = int(last_known_meta.get("last_measurement_id", 0) or 0)
 
-        _LOGGER.debug(
-            "Measurements fetch: last_known=%s primary_ts=%s request=%s measurement_id=%s",
-            last_known_updated_at,
-            primary_ts,
-            request_last_updated_at,
-            last_measurement_id,
-        )
-
         tasks = [
             self.async_get_user_settings(),
             self.async_list_goals(user_id),
@@ -533,7 +481,7 @@ class FeelfitApi:
 
         for idx, res in enumerate(results):
             if isinstance(res, Exception):
-                _LOGGER.error("Error fetching index %s: %s", idx, res)
+                _LOGGER.error("Failed to fetch FITAGE data item %s", idx)
                 continue
             if idx == 0:
                 user_settings = res or {}
@@ -555,8 +503,8 @@ class FeelfitApi:
                 )
                 measurements_data = fallback or {}
                 measurements_list = measurements_data.get("measurements") or []
-            except Exception as exc:
-                _LOGGER.debug("Fallback measurements fetch failed: %s", exc)
+            except Exception:
+                _LOGGER.debug("Fallback measurements fetch failed")
 
         try:
             returned_last_updated_at = int(
@@ -573,12 +521,9 @@ class FeelfitApi:
                 self._last_measurements_meta["last_measurement_id"] = (
                     returned_last_measurement_id
                 )
-            _LOGGER.debug("Updated measurements meta: %s", self._last_measurements_meta)
+            _LOGGER.debug("Updated incremental measurement metadata")
         except (ValueError, TypeError):
-            _LOGGER.debug(
-                "Could not update measurements meta from response: %s",
-                measurements_data,
-            )
+            _LOGGER.debug("Could not update incremental measurement metadata")
 
         device_binds = device_binds_data.get("device_binds") or []
         device_models = device_binds_data.get("device_models") or []
