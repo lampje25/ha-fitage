@@ -1,8 +1,17 @@
 # FITAGE for Home Assistant
 
-FITAGE is a custom integration that brings body-composition measurements from the FITAGE cloud into Home Assistant. It connects to the FITAGE/QNClouds backend with your FITAGE account; no Bluetooth or BLE connection to the scale is required. You can continue using the official FITAGE app normally alongside this integration.
+FITAGE is a Home Assistant custom integration for FITAGE smart scales. It imports weight and body-composition data from the FITAGE/QNClouds cloud, supports multiple profiles, synchronizes historical measurements with their exact timestamps, and can optionally publish long-term statistics to Home Assistant Recorder. No Bluetooth or BLE connection to the scale is required, and you can continue using the FITAGE app alongside the integration.
 
 This is an independent community project. It is not an official integration and is not affiliated with or supported by FITAGE, QingNiu, or QNClouds.
+
+## Highlights
+
+- Install through HACS as a custom repository or install manually.
+- Represent each linked FITAGE profile as a separate Home Assistant device.
+- Expose weight, BMI, body composition, heart rate, goals, and other measurements as sensors when supplied by the cloud.
+- Synchronize historical measurements while preserving their original timestamps.
+- Keep raw history in a private Home Assistant Store.
+- Optionally and explicitly opt in to long-term statistics in Recorder for native graphs and dashboard cards.
 
 ## Available sensors
 
@@ -40,6 +49,10 @@ Statistics write the deterministic last measurement of each UTC hour to `state`;
 ### Privacy
 
 Body-composition history is health data. Raw history uses a private Store, Recorder import requires explicit opt-in, and exact websocket access is admin-only. Local hashed profile/statistic references prevent FITAGE user IDs and measurement IDs from appearing in websocket responses or statistic IDs.
+
+## Dashboard example
+
+See the [weight statistics graph example](docs/dashboard-example.md) for a standard Home Assistant `statistics-graph` card using FITAGE long-term statistics. The example explains how to find your local statistic ID and also mentions an optional ApexCharts alternative for more advanced period controls.
 
 ## What's new in v1.3.0
 
