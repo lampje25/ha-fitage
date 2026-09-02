@@ -78,6 +78,8 @@ Assessment categories reconstructed from the official FITAGE app logic appear as
 
 ## Installation with HACS
 
+FITAGE v1.4.1 requires Home Assistant 2025.12.0 or newer.
+
 1. Install [HACS](https://hacs.xyz/) if it is not already available.
 2. Open HACS in Home Assistant and select **Custom repositories** from the menu.
 3. Add `https://github.com/lampje25/ha-fitage` with category **Integration**.

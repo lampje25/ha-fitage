@@ -60,7 +60,7 @@ FITAGE smart-scale custom integration: multi-profile sensors and history for Hom
 ### Draft
 
 ```markdown
-I have released FITAGE v1.4.0, an independent Home Assistant custom integration for smart-scale data available through the FITAGE/QNClouds cloud.
+I have released FITAGE v1.4.1, an independent Home Assistant custom integration for smart-scale data available through the FITAGE/QNClouds cloud.
 
 It supports separate devices for multiple profiles, weight and body-composition sensors, and historical synchronization with the original timestamps. Selected profiles and metrics can optionally be imported as long-term Recorder statistics; that health-data feature is disabled by default and requires explicit opt-in.
 

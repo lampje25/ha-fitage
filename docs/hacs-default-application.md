@@ -14,9 +14,7 @@ This document prepares a future submission of `lampje25/ha-fitage` to the HACS d
 
 ## Required action before submission
 
-HACS requires a new full GitHub release after the HACS and Hassfest actions have completed successfully. Release `v1.4.0` was published at `2026-09-02T18:16:49Z`; Hassfest completed at `18:16:42Z`, but HACS validation completed at `18:17:05Z`. A future release must therefore be created after both workflows pass on the intended release commit. Do not represent v1.4.0 as satisfying this ordering requirement.
-
-After the documentation/workflow changes are approved and published, both Actions must pass without disabled checks. Then create a new full release, and use links to the resulting successful runs and release in the application.
+HACS requires a new full GitHub release after the HACS and Hassfest actions have completed successfully. Release `v1.4.0` was published at `2026-09-02T18:16:49Z`; Hassfest completed at `18:16:42Z`, but HACS validation completed at `18:17:05Z`. The HACS application must therefore point to a later release created after both workflows pass on its release commit. Do not represent v1.4.0 as satisfying this ordering requirement. Verify the later release and workflow timestamps immediately before submitting, and use those actual links in the application.
 
 ## Default-list change
 
