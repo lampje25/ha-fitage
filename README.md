@@ -13,6 +13,14 @@ This is an independent community project. It is not an official integration and 
 - Keep raw history in a private Home Assistant Store.
 - Optionally and explicitly opt in to long-term statistics in Recorder for native graphs and dashboard cards.
 
+## Screenshots
+
+![FITAGE integration overview with two fictional profiles](docs/images/fitage-integration-overview.png)
+
+![FITAGE fictional history dashboard](docs/images/fitage-history-dashboard.png)
+
+See the [screenshot gallery and reuse notes](docs/screenshots.md) for profile sensors and the privacy opt-in screen. All shown profiles and measurements are fictional.
+
 ## Available sensors
 
 Depending on the data returned for your profile and scale, the integration provides:
