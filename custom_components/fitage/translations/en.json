@@ -134,5 +134,16 @@
         "name": "Recommended Weight"
       }
     }
+  },
+  "options": {
+    "step": {
+      "profiles": {
+        "title": "FITAGE options",
+        "description": "Select profiles. Historical statistics are disabled by default. Enabling them stores derived health measurements in Recorder; disabling stops future imports but does not remove existing statistics.",
+        "data": {
+          "import_history_statistics": "Import historical FITAGE statistics"
+        }
+      }
+    }
   }
 }

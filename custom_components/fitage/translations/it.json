@@ -134,5 +134,16 @@
         "name": "Peso consigliato"
       }
     }
+  },
+  "options": {
+    "step": {
+      "profiles": {
+        "title": "Opzioni FITAGE",
+        "description": "Seleziona i profili. Le statistiche storiche sono disattivate per impostazione predefinita. Abilitandole, le misurazioni sanitarie derivate vengono salvate nel Recorder; disabilitandole si interrompono le importazioni future senza eliminare le statistiche esistenti.",
+        "data": {
+          "import_history_statistics": "Importa statistiche storiche FITAGE"
+        }
+      }
+    }
   }
 }

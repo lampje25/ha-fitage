@@ -11,8 +11,20 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import FeelfitApi, FeelfitApiError
-from .const import CONF_SELECTED_PROFILES, DOMAIN, PLATFORMS
+from .const import (
+    CONF_IMPORT_HISTORY_STATISTICS,
+    CONF_SELECTED_PROFILES,
+    DOMAIN,
+    PLATFORMS,
+)
+from .history import FitageHistoryManager
+from .history_websocket import async_register_history_websocket
 from .migration import migrate_entity_registry
+from .statistics import (
+    FitageStatisticsImporter,
+    StatisticsCleanupError,
+    async_clear_entry_statistics,
+)
 
 _LOGGER = logging.getLogger("custom_components.fitage")
 
@@ -72,11 +84,25 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if saved_user_info:
         api.user_info = saved_user_info
 
+    history = FitageHistoryManager(hass, entry.entry_id)
+    await history.async_load()
+    api.history = history
+    statistics = FitageStatisticsImporter(
+        hass,
+        entry.entry_id,
+        history,
+        enabled=entry.options.get(CONF_IMPORT_HISTORY_STATISTICS, False),
+    )
+    api.statistics = statistics
+
     hass.data[DOMAIN][entry.entry_id] = {
         "api": api,
+        "history": history,
+        "statistics": statistics,
         "user_info": api.user_info,
         "selected_profiles": selected_profiles,
     }
+    async_register_history_websocket(hass)
 
     try:
         user_id = (
@@ -172,3 +198,51 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id, None)
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Remove only this entry's derived statistics and private raw Store."""
+    loaded_data = (hass.data.get(DOMAIN) or {}).get(entry.entry_id)
+    loaded_history = (
+        loaded_data.get("history") if isinstance(loaded_data, dict) else None
+    )
+    history = (
+        loaded_history
+        if isinstance(loaded_history, FitageHistoryManager)
+        else FitageHistoryManager(hass, entry.entry_id)
+    )
+    user_ids: set[str] = set()
+    try:
+        if not history.is_loaded:
+            await history.async_load()
+        user_ids.update(history.profile_ids())
+    except Exception:  # noqa: BLE001 -- preserve Store and redact load failures.
+        _LOGGER.error(
+            "FITAGE cleanup could not verify stored statistics; preserving the "
+            "private history Store for recovery"
+        )
+        return
+
+    if not history.statistics_may_exist():
+        await history.async_remove_store()
+        return
+
+    user_ids.update(
+        str(profile["user_id"])
+        for profile in entry.data.get("profiles_list") or []
+        if isinstance(profile, dict) and profile.get("user_id") not in (None, "")
+    )
+    user_ids.update(str(item) for item in entry.data.get(CONF_SELECTED_PROFILES) or [])
+    user_info = entry.data.get("user_info") or {}
+    if user_info.get("user_id") not in (None, ""):
+        user_ids.add(str(user_info["user_id"]))
+
+    try:
+        await async_clear_entry_statistics(hass, entry.entry_id, user_ids)
+    except StatisticsCleanupError:
+        _LOGGER.error(
+            "FITAGE statistics cleanup did not complete; preserving the private "
+            "history Store for recovery"
+        )
+        return
+    await history.async_remove_store()

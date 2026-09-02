@@ -47,6 +47,8 @@ class FeelfitApi:
         self.token_expires: float | None = None
         self.user_info: dict[str, Any] = {}
         self._last_measurements_meta: dict[str, dict[str, Any]] = {}
+        self.history: Any | None = None
+        self.statistics: Any | None = None
 
     def _build_url(self, path: str, extra_params: dict[str, str] | None = None) -> str:
         """Build URL with query parameters."""
@@ -236,6 +238,31 @@ class FeelfitApi:
         }
         return await self._get(PATH_MEASUREMENTS, extra)
 
+    async def async_get_measurements_history_page(
+        self, user_id: str, last_updated_at: int = 0, last_measurement_id: str = "0"
+    ) -> dict[str, Any]:
+        """Fetch one read-only history page without changing runtime state."""
+        if not self.token:
+            raise FeelfitApiError("Not authenticated")
+        return await self._get(
+            PATH_MEASUREMENTS,
+            {
+                "user_id": user_id,
+                "last_updated_at": str(last_updated_at),
+                "last_measurement_id": str(last_measurement_id),
+            },
+        )
+
+    async def async_get_measurements_probe_page(
+        self, user_id: str, last_updated_at: int = 0, last_measurement_id: str = "0"
+    ) -> dict[str, Any]:
+        """Fetch one read-only measurement page without changing runtime state."""
+        return await self.async_get_measurements_history_page(
+            user_id,
+            last_updated_at=last_updated_at,
+            last_measurement_id=last_measurement_id,
+        )
+
     async def async_fetch_all(
         self, user_id: str, selected_profiles: list[str] | None = None
     ) -> dict[str, Any]:
@@ -277,6 +304,42 @@ class FeelfitApi:
         for profile in profiles_to_fetch:
             profile_user_id = str(profile.get("user_id"))
             _LOGGER.debug("Fetching data for a selected profile")
+
+            if self.history is not None:
+                results = await asyncio.gather(
+                    self.async_get_user_settings(),
+                    self.async_list_goals(profile_user_id),
+                    self.history.async_sync_profile(self, profile_user_id),
+                    return_exceptions=True,
+                )
+                user_settings: dict[str, Any] = {}
+                goals: dict[str, Any] = {}
+                for idx, res in enumerate(results):
+                    if isinstance(res, Exception):
+                        _LOGGER.error("Failed to fetch profile data item %s", idx)
+                        continue
+                    if idx == 0:
+                        user_settings = res or {}
+                    elif idx == 1:
+                        goals = res or {}
+
+                latest_measurement = self.history.latest_measurement(profile_user_id)
+                stored_cursor = self.history.cursor(profile_user_id)
+                all_profiles_data.append(
+                    {
+                        "user_info": profile,
+                        "user_settings": user_settings,
+                        "goals": goals,
+                        "measurements": {
+                            "last_measurement": latest_measurement,
+                            "measurements": (
+                                [latest_measurement] if latest_measurement else []
+                            ),
+                            "last_updated_at": stored_cursor[0],
+                        },
+                    }
+                )
+                continue
 
             last_known_meta = self._last_measurements_meta.get(profile_user_id, {})
             last_known_updated_at = int(last_known_meta.get("last_updated_at") or 0)
@@ -414,6 +477,10 @@ class FeelfitApi:
                 if brand.get("brand_name"):
                     merged["brand_name"] = brand.get("brand_name")
             enriched_devices.append(merged)
+
+        if self.statistics is not None:
+            self.statistics.configure_profile_names(all_profiles)
+            await self.statistics.async_reconcile()
 
         return {
             "profiles": all_profiles_data,

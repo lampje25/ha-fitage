@@ -14,7 +14,13 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import FeelfitApi, FeelfitApiError
-from .const import CONF_PROFILES_LIST, CONF_SELECTED_PROFILES, DOMAIN, LOGGER
+from .const import (
+    CONF_IMPORT_HISTORY_STATISTICS,
+    CONF_PROFILES_LIST,
+    CONF_SELECTED_PROFILES,
+    DOMAIN,
+    LOGGER,
+)
 
 _LOGGER = logging.getLogger(LOGGER)
 
@@ -225,7 +231,7 @@ class FeelfitOptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             selected = []
             for label, is_selected in user_input.items():
-                if is_selected:
+                if is_selected and label != CONF_IMPORT_HISTORY_STATISTICS:
                     user_id = self._label_to_user_id.get(label, label)
                     selected.append(user_id)
 
@@ -238,7 +244,13 @@ class FeelfitOptionsFlowHandler(config_entries.OptionsFlow):
                     selected = [str(primary.get("user_id"))]
 
             return self.async_create_entry(
-                title="", data={CONF_SELECTED_PROFILES: selected}
+                title="",
+                data={
+                    CONF_SELECTED_PROFILES: selected,
+                    CONF_IMPORT_HISTORY_STATISTICS: user_input.get(
+                        CONF_IMPORT_HISTORY_STATISTICS, False
+                    ),
+                },
             )
 
         profiles_schema = {}
@@ -247,6 +259,14 @@ class FeelfitOptionsFlowHandler(config_entries.OptionsFlow):
             CONF_SELECTED_PROFILES,
             self.config_entry.data.get(CONF_SELECTED_PROFILES, []),
         )
+        profiles_schema[
+            vol.Optional(
+                CONF_IMPORT_HISTORY_STATISTICS,
+                default=self.config_entry.options.get(
+                    CONF_IMPORT_HISTORY_STATISTICS, False
+                ),
+            )
+        ] = selector.BooleanSelector()
 
         for profile in self._all_profiles:
             user_id = str(profile.get("user_id"))

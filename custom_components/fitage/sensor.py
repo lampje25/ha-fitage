@@ -402,6 +402,7 @@ async def async_setup_entry(
         update_method=async_update_data,
         update_interval=SCAN_INTERVAL,
     )
+    data["coordinator"] = coordinator
 
     await coordinator.async_refresh()
     data_fetched = coordinator.data or {}

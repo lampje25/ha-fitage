@@ -10,6 +10,7 @@ SCAN_INTERVAL = timedelta(seconds=120)
 
 CONF_SELECTED_PROFILES = "selected_profiles"
 CONF_PROFILES_LIST = "profiles_list"
+CONF_IMPORT_HISTORY_STATISTICS = "import_history_statistics"
 
 PROFILE_METRICS = ("account_name", "weight", "height", "birthday", "email")
 GOAL_METRICS = ("weight", "bodyfat", "water")
