@@ -9,6 +9,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from PIL import Image
+
 from custom_components.fitage import async_update_options
 from custom_components.fitage.const import DOMAIN
 
@@ -48,6 +50,27 @@ def test_temporary_actions_and_services_are_absent() -> None:
         probe_module,
     ):
         assert temporary not in rendered
+
+
+def test_brand_assets_are_valid() -> None:
+    brand = COMPONENT / "brand"
+    expected_sizes = {
+        "icon.png": (256, 256),
+        "icon@2x.png": (512, 512),
+        "logo.png": (256, 256),
+        "logo@2x.png": (512, 512),
+    }
+
+    for filename, expected_size in expected_sizes.items():
+        path = brand / filename
+        assert path.is_file()
+        with Image.open(path) as image:
+            image.load()
+            assert image.format == "PNG"
+            assert image.mode == "RGBA"
+            assert image.size == expected_size
+            assert image.width == image.height
+            assert image.getchannel("A").getextrema()[0] < 255
 
 
 @run_async
