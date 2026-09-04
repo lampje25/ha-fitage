@@ -21,6 +21,7 @@ from homeassistant.helpers.recorder import DATA_INSTANCE
 
 from .const import DOMAIN
 from .history import FitageHistoryManager
+from .measurement import MASS_PERCENTAGE_KEYS, effective_mass_value
 
 _CLEAR_TIMEOUT = 30
 
@@ -68,15 +69,23 @@ def hourly_statistics(
     records: dict[str, dict[str, Any]], metric: str
 ) -> list[StatisticData]:
     """Select one deterministic last measurement per UTC hour."""
-    winners: dict[int, dict[str, Any]] = {}
+    winners: dict[int, tuple[dict[str, Any], float]] = {}
     for record in records.values():
-        if metric not in record or isinstance(record[metric], bool):
-            continue
         try:
             timestamp = float(record["time_stamp"])
-            value = float(record[metric])
         except (KeyError, TypeError, ValueError):
             continue
+        if metric in MASS_PERCENTAGE_KEYS:
+            value = effective_mass_value(record, metric)
+            if value is None:
+                continue
+        else:
+            if metric not in record or isinstance(record[metric], bool):
+                continue
+            try:
+                value = float(record[metric])
+            except (TypeError, ValueError):
+                continue
         if not math.isfinite(timestamp) or not math.isfinite(value):
             continue
         hour = int(timestamp // 3600)
@@ -85,14 +94,14 @@ def hourly_statistics(
             timestamp,
             str(record["measurement_id"]),
         ) > (
-            float(current["time_stamp"]),
-            str(current["measurement_id"]),
+            float(current[0]["time_stamp"]),
+            str(current[0]["measurement_id"]),
         ):
-            winners[hour] = record
+            winners[hour] = (record, value)
     return [
         StatisticData(
             start=datetime.fromtimestamp(hour * 3600, UTC),
-            state=float(winners[hour][metric]),
+            state=winners[hour][1],
         )
         for hour in sorted(winners)
     ]

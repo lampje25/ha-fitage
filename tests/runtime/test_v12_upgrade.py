@@ -483,7 +483,7 @@ async def test_successful_v12_runtime_upgrade(hass: HomeAssistant) -> None:
         assert hass.states.get(subprofile_goal).state == "unknown"
         assert hass.states.get(subprofile_email).state == "unknown"
         assert hass.states.get(subprofile_bodyfat).state == "unknown"
-        assert hass.states.get(subprofile_water_mass).state == "0"
+        assert hass.states.get(subprofile_water_mass).state == "unknown"
 
         for profile_id, kind, metric in (
             (PRIMARY_ID, "profile", "weight"),

@@ -61,7 +61,16 @@ def manager(store: Store | None = None) -> FitageHistoryManager:
                             "private-id-b", "private-user-a", 20, weight=0, bmi=None
                         ),
                         "private-id-a": record(
-                            "private-id-a", "private-user-a", 10, weight=70
+                            "private-id-a",
+                            "private-user-a",
+                            10,
+                            weight=70,
+                            bodyfat=20,
+                            water=50,
+                            protein=10,
+                            body_fat_mass=0,
+                            body_water_mass=0,
+                            protein_mass=0,
                         ),
                         "private-id-c": record(
                             "private-id-c", "private-user-a", 20, weight=71
@@ -287,3 +296,24 @@ def test_store_not_written_and_cross_profile_isolation() -> None:
     result = query_history(data, message(profile), b"k" * 32)
     assert [item["metrics"]["weight"] for item in result["records"]] == [80]
     assert store.saves == []
+
+
+def test_mass_metrics_are_effective_but_raw_history_is_unchanged() -> None:
+    data = entry_data()
+    profile = _profile_ref("entry-one", "private-user-a")
+    msg = message(
+        profile,
+        metrics=["body_fat_mass", "body_water_mass", "protein_mass"],
+    )
+
+    result = query_history(data, msg, b"k" * 32)
+
+    assert result["records"][0]["metrics"] == {
+        "body_fat_mass": 14,
+        "body_water_mass": 35,
+        "protein_mass": 7,
+    }
+    raw = data["history"].measurements("private-user-a")["private-id-a"]
+    assert raw["body_fat_mass"] == 0
+    assert raw["body_water_mass"] == 0
+    assert raw["protein_mass"] == 0

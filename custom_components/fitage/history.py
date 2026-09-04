@@ -13,9 +13,12 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from .measurement import MASS_PERCENTAGE_KEYS, effective_mass_value
+
 HISTORY_STORE_VERSION = 1
 HISTORY_STORE_KEY_PREFIX = "fitage.history"
 MAX_HISTORY_PAGES = 10
+STATISTICS_PROJECTION_VERSION = 2
 
 
 class HistorySchemaError(ValueError):
@@ -146,7 +149,7 @@ def _empty_profile() -> dict[str, Any]:
         "measurements": {},
         "sync": {"complete": False},
         "statistics": {
-            "version": 1,
+            "version": STATISTICS_PROJECTION_VERSION,
             "fingerprints": {},
             "pending_rebuilds": [],
             "imported_metrics": [],
@@ -458,8 +461,9 @@ def _validate_stored_data(stored: Any) -> dict[str, Any]:
             ):
                 raise HistorySchemaError("Invalid FITAGE history Store record")
             validated_records[measurement_id] = deepcopy(record)
-        statistics = profile.get("statistics") or {
-            "version": 1,
+        stored_statistics = profile.get("statistics")
+        statistics = stored_statistics or {
+            "version": STATISTICS_PROJECTION_VERSION,
             "fingerprints": {},
             "pending_rebuilds": [],
             "imported_metrics": [],
@@ -471,7 +475,7 @@ def _validate_stored_data(stored: Any) -> dict[str, Any]:
             imported_metrics = list(statistics.get("fingerprints", {}))
         if (
             not isinstance(statistics, dict)
-            or statistics.get("version") != 1
+            or statistics.get("version") not in (1, STATISTICS_PROJECTION_VERSION)
             or not isinstance(statistics.get("fingerprints"), dict)
             or not all(
                 isinstance(key, str) and isinstance(value, str)
@@ -485,6 +489,12 @@ def _validate_stored_data(stored: Any) -> dict[str, Any]:
             raise HistorySchemaError("Invalid FITAGE history statistics metadata")
         statistics = deepcopy(statistics)
         statistics["imported_metrics"] = sorted(set(imported_metrics))
+        if stored_statistics is not None and statistics["version"] == 1:
+            # Projection v2 resolves FITAGE zero sentinels for these masses.
+            statistics["version"] = STATISTICS_PROJECTION_VERSION
+            statistics["pending_rebuilds"] = sorted(
+                set(statistics["pending_rebuilds"]) | set(MASS_PERCENTAGE_KEYS)
+            )
         result["profiles"][user_id] = {
             "cursor": deepcopy(cursor),
             "measurements": validated_records,
@@ -498,13 +508,21 @@ def _statistics_fingerprint(records: dict[str, dict[str, Any]], metric: str) -> 
     """Hash only the deterministic hourly projection for one metric."""
     projected: list[tuple[int, float, str, float]] = []
     for record in records.values():
-        if metric not in record or isinstance(record[metric], bool):
-            continue
         try:
             timestamp = float(record["time_stamp"])
-            value = float(record[metric])
         except (TypeError, ValueError):
             continue
+        if metric in MASS_PERCENTAGE_KEYS:
+            value = effective_mass_value(record, metric)
+            if value is None:
+                continue
+        else:
+            if metric not in record or isinstance(record[metric], bool):
+                continue
+            try:
+                value = float(record[metric])
+            except (TypeError, ValueError):
+                continue
         if not math.isfinite(value):
             continue
         projected.append(
@@ -518,13 +536,21 @@ def _statistics_fingerprint(records: dict[str, dict[str, Any]], metric: str) -> 
 def _statistics_has_data(records: dict[str, dict[str, Any]], metric: str) -> bool:
     """Return whether a metric has at least one valid projected value."""
     for record in records.values():
-        if metric not in record or isinstance(record[metric], bool):
-            continue
         try:
             timestamp = float(record["time_stamp"])
-            value = float(record[metric])
         except (KeyError, TypeError, ValueError):
             continue
+        if metric in MASS_PERCENTAGE_KEYS:
+            value = effective_mass_value(record, metric)
+            if value is None:
+                continue
+        else:
+            if metric not in record or isinstance(record[metric], bool):
+                continue
+            try:
+                value = float(record[metric])
+            except (TypeError, ValueError):
+                continue
         if math.isfinite(timestamp) and math.isfinite(value):
             return True
     return False

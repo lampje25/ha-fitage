@@ -194,16 +194,39 @@ def test_measurement_entity_receives_later_measurement_without_recreation() -> N
     assert sensor.unique_id == "profile-a_measurement_bmi"
 
 
-def test_explicit_zero_measurement_mass_is_not_treated_as_missing() -> None:
-    """A reported zero is retained instead of triggering percentage fallback."""
-    profile = _profile(
-        "profile-a",
-        "A",
-        measurement={"weight": 80, "bodyfat": 25, "body_fat_mass": 0},
-    )
+@pytest.mark.parametrize(
+    ("metric", "expected"),
+    [
+        ("body_fat_mass", 27.65),
+        ("body_water_mass", 48.39),
+        ("protein_mass", 15.34),
+    ],
+)
+def test_explicit_zero_measurement_mass_uses_percentage_fallback(
+    metric: str, expected: float
+) -> None:
+    """A FITAGE zero sentinel is replaced by the derived body mass."""
+    measurement = {
+        "weight": 94.7,
+        "bodyfat": 29.2,
+        "water": 51.1,
+        "protein": 16.2,
+        metric: 0,
+    }
     sensor = FeelfitMeasurementSensor(
-        _coordinator([profile]),
-        _description("body_fat_mass", "measurement"),
+        _coordinator([_profile("profile-a", "A", measurement=measurement)]),
+        _description(metric, "measurement"),
+        "profile-a",
+    )
+
+    assert sensor.native_value == pytest.approx(expected)
+
+
+def test_zero_for_an_unrelated_measurement_is_preserved() -> None:
+    """The FITAGE sentinel rule is limited to the three body masses."""
+    sensor = FeelfitMeasurementSensor(
+        _coordinator([_profile("profile-a", "A", measurement={"weight": 0})]),
+        _description("weight", "measurement"),
         "profile-a",
     )
 

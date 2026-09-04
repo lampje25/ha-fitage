@@ -30,6 +30,7 @@ from .const import (
     PROFILE_METRICS,
     SCAN_INTERVAL,
 )
+from .measurement import MASS_PERCENTAGE_KEYS, effective_mass_value
 
 _LOGGER = logging.getLogger(LOGGER)
 
@@ -792,26 +793,8 @@ class FeelfitMeasurementSensor(FeelfitProfileEntity):
             )
 
         raw_val = measurement.get(self._measurement_key)
-        mass_percentage_keys = {
-            "body_fat_mass": "bodyfat",
-            "body_water_mass": "water",
-            "protein_mass": "protein",
-        }
-        if percentage_key := mass_percentage_keys.get(self._measurement_key):
-            mass = _as_finite_float(raw_val)
-            if mass is not None:
-                raw_val = mass
-            else:
-                weight = _as_finite_float(measurement.get("weight"))
-                percentage = _as_finite_float(measurement.get(percentage_key))
-                if (
-                    weight is None
-                    or weight <= 0
-                    or percentage is None
-                    or percentage < 0
-                ):
-                    return None
-                raw_val = weight * percentage / 100
+        if self._measurement_key in MASS_PERCENTAGE_KEYS:
+            raw_val = effective_mass_value(measurement, self._measurement_key)
 
         if self._measurement_key == "time_stamp" and raw_val:
             try:

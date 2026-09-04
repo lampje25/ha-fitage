@@ -12,7 +12,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from custom_components.fitage.history import FitageHistoryManager, HistoryPage
+from custom_components.fitage.history import (
+    STATISTICS_PROJECTION_VERSION,
+    FitageHistoryManager,
+    HistoryPage,
+    _statistics_fingerprint,
+    _statistics_has_data,
+)
 from custom_components.fitage.statistics import (
     STATISTIC_METRICS,
     FitageStatisticsImporter,
@@ -481,3 +487,124 @@ async def test_metadata_upsert_does_not_touch_another_entry() -> None:
         for call in add.call_args_list
     )
     assert manager.data == before
+
+
+@pytest.mark.parametrize(
+    ("metric", "expected"),
+    [
+        ("body_fat_mass", 27.6524),
+        ("body_water_mass", 48.3917),
+        ("protein_mass", 15.3414),
+    ],
+)
+def test_mass_statistics_use_effective_values(metric: str, expected: float) -> None:
+    measurement = record(
+        "mass",
+        "private-a",
+        3601,
+        weight=94.7,
+        bodyfat=29.2,
+        water=51.1,
+        protein=16.2,
+        body_fat_mass=0,
+        body_water_mass=0,
+        protein_mass=0,
+    )
+
+    result = hourly_statistics({"mass": measurement}, metric)
+
+    assert result[0]["state"] == pytest.approx(expected)
+
+
+def test_mass_fingerprint_and_data_detection_use_effective_value() -> None:
+    measurement = record(
+        "mass", "private-a", 3601, weight=80, bodyfat=25, body_fat_mass=0
+    )
+    records = {"mass": measurement}
+    before = _statistics_fingerprint(records, "body_fat_mass")
+
+    assert _statistics_has_data(records, "body_fat_mass") is True
+    measurement["weight"] = 84
+    assert _statistics_fingerprint(records, "body_fat_mass") != before
+    after_weight = _statistics_fingerprint(records, "body_fat_mass")
+    measurement["bodyfat"] = 30
+    assert _statistics_fingerprint(records, "body_fat_mass") != after_weight
+
+
+def test_unresolvable_mass_is_not_statistic_data_or_zero() -> None:
+    records = {
+        "mass": record("mass", "private-a", 3601, bodyfat=25, body_fat_mass=None)
+    }
+
+    assert _statistics_has_data(records, "body_fat_mass") is False
+    assert hourly_statistics(records, "body_fat_mass") == []
+
+
+@run_async
+async def test_effective_mass_change_marks_only_that_metric_pending() -> None:
+    measurement = record(
+        "mass", "private-a", 3601, weight=80, bodyfat=25, body_fat_mass=0
+    )
+    data = {
+        "profiles": {
+            "private-a": {
+                "cursor": {"last_updated_at": 1, "last_measurement_id": "cursor"},
+                "measurements": {"mass": measurement},
+                "sync": {"complete": True},
+                "statistics": {
+                    "version": STATISTICS_PROJECTION_VERSION,
+                    "fingerprints": {},
+                    "pending_rebuilds": [],
+                    "imported_metrics": ["body_fat_mass"],
+                },
+            }
+        }
+    }
+    manager = FitageHistoryManager(None, "entry", store=Store())
+    manager.load_for_test(data)
+    manager.configure_statistics(frozenset({"body_fat_mass"}))
+    page = HistoryPage.parse(
+        {
+            "measurements": [{**measurement, "weight": 84}],
+            "delete_measurement_ids": [],
+            "last_updated_at": 2,
+            "last_measurement_id": "next",
+            "finish_flag": 1,
+        },
+        "private-a",
+    )
+
+    await manager._async_commit_page("private-a", page)
+
+    assert manager.pending_statistics_rebuilds() == [("private-a", "body_fat_mass")]
+
+
+def test_projection_v1_marks_only_mass_metrics_once_for_every_profile() -> None:
+    data = raw_data()
+    for profile in data["profiles"].values():
+        profile["statistics"] = {
+            "version": 1,
+            "fingerprints": {"weight": "old", "body_fat_mass": "old"},
+            "pending_rebuilds": ["weight"],
+            "imported_metrics": ["weight", "body_fat_mass"],
+        }
+    manager = FitageHistoryManager(None, "entry", store=Store())
+
+    manager.load_for_test(data)
+
+    expected_mass_metrics = {
+        "body_fat_mass",
+        "body_water_mass",
+        "protein_mass",
+        "weight",
+    }
+    for profile in manager.data["profiles"].values():
+        assert profile["statistics"]["version"] == STATISTICS_PROJECTION_VERSION
+        assert set(profile["statistics"]["pending_rebuilds"]) == expected_mass_metrics
+
+    migrated = manager.data
+    for profile in migrated["profiles"].values():
+        profile["statistics"]["pending_rebuilds"] = []
+    restarted = FitageHistoryManager(None, "entry", store=Store())
+    restarted.load_for_test(migrated)
+    assert restarted.pending_statistics_rebuilds() == []

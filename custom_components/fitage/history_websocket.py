@@ -17,6 +17,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import DOMAIN
 from .history import FitageHistoryManager
+from .measurement import MASS_PERCENTAGE_KEYS, effective_mass_value
 
 COMMAND_PROFILES = "fitage/history/profiles"
 COMMAND_QUERY = "fitage/history/query"
@@ -188,6 +189,19 @@ def _decode_cursor(key: bytes, cursor: str, binding: Mapping[str, Any]) -> int:
         ) from err
 
 
+def _project_metrics(record: Mapping[str, Any], metrics: list[str]) -> dict[str, Any]:
+    """Project requested metrics while preserving raw non-mass semantics."""
+    projected: dict[str, Any] = {}
+    for metric in metrics:
+        if metric in MASS_PERCENTAGE_KEYS:
+            value = effective_mass_value(record, metric)
+            if value is not None:
+                projected[metric] = value
+        elif metric in record:
+            projected[metric] = record[metric]
+    return projected
+
+
 def query_history(
     entry_data: dict[str, Any], msg: Mapping[str, Any], cursor_key: bytes
 ) -> dict[str, Any]:
@@ -235,9 +249,7 @@ def query_history(
     response_records = [
         {
             "timestamp": record["time_stamp"],
-            "metrics": {
-                metric: record[metric] for metric in metrics if metric in record
-            },
+            "metrics": _project_metrics(record, metrics),
         }
         for record in page
     ]
