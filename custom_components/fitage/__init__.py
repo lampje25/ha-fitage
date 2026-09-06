@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 
 from .api import FeelfitApi, FeelfitApiError
 from .const import (
@@ -17,6 +18,7 @@ from .const import (
     DOMAIN,
     PLATFORMS,
 )
+from .frontend import async_register_frontend
 from .history import FitageHistoryManager
 from .history_websocket import async_register_history_websocket
 from .migration import migrate_entity_registry
@@ -27,6 +29,17 @@ from .statistics import (
 )
 
 _LOGGER = logging.getLogger("custom_components.fitage")
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the FITAGE integration.
+
+    Called once per Home Assistant runtime regardless of how many FITAGE
+    config entries exist, which is why the frontend card registration lives
+    here instead of in ``async_setup_entry``.
+    """
+    await async_register_frontend(hass)
+    return True
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

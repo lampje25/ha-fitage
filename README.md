@@ -33,6 +33,16 @@ Depending on the data returned for your profile and scale, the integration provi
 
 The report-control sensors reproduce the verified normal FITAGE calculation route (`mea_category = 0`). They are unavailable for unsupported measurement categories rather than using an unverified calculation.
 
+## What's new in v1.5.0
+
+### FITAGE Dashboard Card
+
+FITAGE v1.5.0 introduces the FITAGE Dashboard Card. The card is bundled with the integration and registered with Home Assistant automatically. See [FITAGE Dashboard Card](#fitage-dashboard-card) below for setup and configuration.
+
+### More reliable profile/statistic linking
+
+Automatic profile-to-statistic linking now uses the profile metadata already recorded for external statistics whenever it is available, instead of relying only on comparing today's weight to nearby historical values. If the right FITAGE profile still cannot be linked with certainty, the card shows a clear error instead of guessing.
+
 ## What's new in v1.4.0
 
 ### Historical synchronization
@@ -58,9 +68,92 @@ Statistics write the deterministic last measurement of each UTC hour to `state`;
 
 Body-composition history is health data. Raw history uses a private Store, Recorder import requires explicit opt-in, and exact websocket access is admin-only. Local hashed profile/statistic references prevent FITAGE user IDs and measurement IDs from appearing in websocket responses or statistic IDs.
 
+## FITAGE Dashboard Card
+
+FITAGE v1.5.0 introduces the FITAGE Dashboard Card. The card is bundled with the integration and automatically registered with Home Assistant as a Lovelace resource - you do not need to install a separate JavaScript file or add a resource by hand.
+
+To use it:
+
+1. Install or update FITAGE through HACS.
+2. Restart Home Assistant.
+3. Open a dashboard.
+4. Click **Add card**.
+5. Search for **FITAGE Card**.
+6. Select the FITAGE profile you want to show in the card editor.
+7. Configure the display, measurements, and appearance.
+
+Card capabilities:
+
+- Graph view (one card per measurement with its own history graph), or a compact overview without graphs.
+- Individual measurements can be turned on or off.
+- Periods `7d`, `14d`, `1m`, `3m`, and `1j` (one year).
+- Adjustable text size.
+- Optional custom colors.
+- The current value and, where available, the minimum and maximum of the normal range.
+- Decimal precision tuned per measurement.
+- Automatic profile/statistic linking, with a clear error shown instead of a guess whenever a profile cannot be linked reliably.
+
+If you manage Lovelace resources through YAML instead of the Home Assistant UI, Home Assistant does not let integrations add resources to that configuration automatically. In that case, add the resource by hand once:
+
+```yaml
+lovelace:
+  resources:
+    - url: /fitage/fitage-card.js?v=0.5.1
+      type: module
+```
+
+FITAGE never edits your `configuration.yaml`, and it never removes or changes a resource it did not create itself.
+
+Minimal configuration:
+
+```yaml
+type: custom:fitage-card
+profile: your_profile
+```
+
+`profile` must exactly match the FITAGE profile name that Home Assistant uses for that profile in your own installation.
+
+The full set of options:
+
+```yaml
+type: custom:fitage-card
+profile: your_profile
+title: FITAGE
+display: graphs
+text_size: normal
+```
+
+- `display` can be `graphs` (the default, one card per measurement with its own history graph) or `compact` (a values-only overview without graphs or period buttons). All graphs on the card share the period selected at the top.
+- `text_size` can be `small`, `normal`, or `large`.
+- Individual measurements can be turned on or off from the visual card editor.
+- The card uses Home Assistant's own theme colors by default; custom colors are optional.
+- Heart rate is intentionally not shown on the card.
+- The card only shows the statistics that actually exist for the selected profile.
+
+Optional custom colors:
+
+```yaml
+type: custom:fitage-card
+profile: your_profile
+display: compact
+text_size: large
+custom_colors: true
+current_color: "#ff9800"
+min_color: "#03a9f4"
+max_color: "#f44336"
+```
+
+The card normally does not need a `statistic_prefix` - it automatically discovers and links the right FITAGE profile statistics. If you ever need to set it explicitly, use a placeholder like this rather than a real statistic ID from your own installation:
+
+```yaml
+type: custom:fitage-card
+profile: your_profile
+statistic_prefix: fitage:test_device_profile_one
+```
+
 ## Dashboard example
 
-See the [weight statistics graph example](docs/dashboard-example.md) for a standard Home Assistant `statistics-graph` card using FITAGE long-term statistics. The example explains how to find your local statistic ID and also mentions an optional ApexCharts alternative for more advanced period controls.
+The dashboard card above is the easiest way to show FITAGE data. For a raw Home Assistant `statistics-graph` card built directly on a FITAGE long-term statistic ID instead, see the [weight statistics graph example](docs/dashboard-example.md). The example explains how to find your local statistic ID and also mentions an optional ApexCharts alternative for more advanced period controls.
 
 ## What's new in v1.3.0
 
@@ -76,7 +169,7 @@ These attributes let dashboards find entities without relying on an entity ID de
 
 ### Upgrading from v1.2
 
-The registry migration runs automatically. Existing entity IDs, history, custom names, device links, and enabled or hidden settings are preserved. An entity such as `sensor.melissa_weight_2` may therefore still have that name after upgrading. This is normal: suffixes such as `_2` are retained for compatibility but are no longer part of the entity's stable technical identity. Existing dashboards do not need to be changed solely because of this migration.
+The registry migration runs automatically. Existing entity IDs, history, custom names, device links, and enabled or hidden settings are preserved. An entity such as `sensor.your_profile_weight_2` may therefore still have that name after upgrading. This is normal: suffixes such as `_2` are retained for compatibility but are no longer part of the entity's stable technical identity. Existing dashboards do not need to be changed solely because of this migration.
 
 If Home Assistant detects the rare case where the new identity is already occupied, it stops the migration safely instead of overwriting an entity. Legacy Feelfit registry entries are not automatically removed.
 
@@ -86,7 +179,7 @@ Assessment categories reconstructed from the official FITAGE app logic appear as
 
 ## Installation with HACS
 
-FITAGE v1.4.2 requires Home Assistant 2025.12.0 or newer.
+FITAGE v1.5.0 requires Home Assistant 2025.12.0 or newer.
 
 1. Install [HACS](https://hacs.xyz/) if it is not already available.
 2. Open HACS in Home Assistant and select **Custom repositories** from the menu.

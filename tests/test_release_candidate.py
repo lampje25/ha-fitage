@@ -1,4 +1,4 @@
-"""Release invariants for FITAGE v1.4.2."""
+"""Release invariants for FITAGE v1.5.0."""
 
 from __future__ import annotations
 
@@ -26,14 +26,25 @@ def run_async(func):
     return wrapped
 
 
-def test_manifest_is_valid_v142_hacs_candidate() -> None:
+def test_manifest_is_valid_v150_hacs_candidate() -> None:
     manifest = json.loads((COMPONENT / "manifest.json").read_text())
-    assert manifest["version"] == "1.4.2"
+    assert manifest["version"] == "1.5.0"
     assert manifest["domain"] == DOMAIN
     assert manifest["config_flow"] is True
-    assert manifest["after_dependencies"] == ["recorder"]
+    assert manifest["after_dependencies"] == ["lovelace", "recorder"]
     assert "recorder" not in manifest["dependencies"]
+    assert "lovelace" not in manifest["dependencies"]
     assert json.loads((ROOT / "hacs.json").read_text())["render_readme"] is True
+
+
+def test_bundled_dashboard_card_is_packaged_with_the_integration() -> None:
+    card = COMPONENT / "www" / "fitage-card.js"
+    assert card.is_file()
+    assert not (ROOT / "fitage-card.js").exists()
+    assert (
+        "frontend"
+        in json.loads((COMPONENT / "manifest.json").read_text())["dependencies"]
+    )
 
 
 def test_release_notes_exist_for_the_manifest_version() -> None:
