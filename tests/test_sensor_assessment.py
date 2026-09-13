@@ -283,6 +283,33 @@ def test_bone_and_bone_ratio_sensors_expose_the_fixed_bone_assessment() -> None:
     assert ratio_sensor.extra_state_attributes["normal_max"] == 5.0
 
 
+def test_bmr_sensor_exposes_the_official_not_standard_and_standard_assessment() -> None:
+    """bmr must report "not_standard"/"standard" (never the old
+    "below_average"/"above_average"), together with the unchanged reference
+    formula's value as reference_bmr, read through the sensor layer intact."""
+    measurement = {
+        "weight": 90,
+        "height": 180,
+        "gender": 1,
+        "birthday": "1990-01-01",
+        "time_stamp": 1_735_689_600,  # 2025-01-01, age 35 -> factor 37.9
+        "bmr": 1900,  # above the ~1827.52 reference
+    }
+    profile = _profile(
+        "profile-a", "A", user_values={"area_code": "NL"}, measurement=measurement
+    )
+    coordinator = _coordinator([profile])
+    sensor = FeelfitMeasurementSensor(
+        coordinator, _description("bmr", "measurement"), "profile-a"
+    )
+
+    assert sensor.native_value == 1900
+    assert sensor.extra_state_attributes["assessment"] == "standard"
+    assert sensor.extra_state_attributes["reference_bmr"] == pytest.approx(
+        1827.52, abs=0.01
+    )
+
+
 def test_sensor_uses_precomputed_assessment_for_its_profile() -> None:
     """Assessment matching uses profile ID and measurement key."""
     measurement = {"weight": 70, "height": 175, "bmi": 25, "gender": 1}

@@ -406,6 +406,83 @@ def test_bmr_age_factor_boundaries(age: int) -> None:
     assert _bmr_factor(age, 1) == expected
 
 
+def _bmr_reference(height: float, weight: float, age: int, gender: int) -> float:
+    """Independently reproduce the official BMR reference formula (unchanged
+    by this fix) for use as test oracle, without relying on assess_measurement
+    itself for the value under test."""
+    return 24 * (0.0061 * height + 0.0128 * weight - 0.1529) * _bmr_factor(
+        age, gender
+    ) - 80
+
+
+@pytest.mark.parametrize(
+    "gender, height, weight, birthday",
+    [
+        (1, 165, 95.15, "1990-01-01"),
+        (0, 170, 65, "1985-06-15"),
+        (1, 180, 90, "2000-01-01"),
+        (0, 160, 55, "1970-03-20"),
+    ],
+)
+def test_bmr_reference_formula_is_unchanged(
+    gender: int, height: float, weight: float, birthday: str
+) -> None:
+    """The official BMR reference formula and age/gender factor table are
+    untouched by this fix - only the "below_average"/"above_average"
+    assessment keys change, to "not_standard"/"standard"."""
+    measurement = _known_measurement()
+    measurement.update(
+        {"gender": gender, "height": height, "weight": weight, "birthday": birthday}
+    )
+    age = _measurement_age(measurement)
+    expected_reference = _bmr_reference(height, weight, age, gender)
+    measurement["bmr"] = expected_reference
+    result = assess_measurement(measurement, {"area_code": "NL"})
+    assert result["bmr"]["reference_bmr"] == pytest.approx(
+        expected_reference, abs=0.01
+    )
+    assert result["bmr"]["assessment"] == "standard"
+
+
+@pytest.mark.parametrize("gender", [1, 0])
+def test_bmr_boundaries_below_at_and_above_reference(gender: int) -> None:
+    """Official FITAGE boundary logic (proven via the app's own
+    levelJudgeSymbolArray: [">="]  for bmr): bmr < reference -> not_standard,
+    bmr >= reference -> standard, so exactly at the reference is "standard"."""
+    measurement = _known_measurement()
+    measurement["gender"] = gender
+    age = _measurement_age(measurement)
+    reference = _bmr_reference(measurement["height"], measurement["weight"], age, gender)
+    for bmr, expected in (
+        (reference - 0.01, "not_standard"),
+        (reference, "standard"),
+        (reference + 0.01, "standard"),
+    ):
+        measurement["bmr"] = bmr
+        result = assess_measurement(measurement, {"area_code": "NL"})
+        assert result["bmr"]["assessment"] == expected
+
+
+@pytest.mark.parametrize(
+    "bmr", [None, "invalid", math.nan, math.inf, -1, True]
+)
+def test_missing_or_invalid_bmr_value_omits_bmr_assessment(bmr: object) -> None:
+    measurement = _known_measurement()
+    measurement["bmr"] = bmr
+    result = assess_measurement(measurement, {"area_code": "NL"})
+    assert "bmr" not in result
+
+
+@pytest.mark.parametrize(
+    "weight", [None, 0, -1, "invalid", math.nan, math.inf, True]
+)
+def test_bmr_requires_a_valid_weight(weight: object) -> None:
+    measurement = _known_measurement()
+    measurement["weight"] = weight
+    result = assess_measurement(measurement, {"area_code": "NL"})
+    assert "bmr" not in result
+
+
 def test_derived_mass_classification_uses_unrounded_values() -> None:
     measurement = _known_measurement()
     measurement.update({"weight": 83.33, "protein": 16, "protein_mass": 13.3327})

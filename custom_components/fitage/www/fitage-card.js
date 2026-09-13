@@ -1,4 +1,4 @@
-const VERSION = "0.6.2";
+const VERSION = "0.6.3";
 const STUB_PROFILE = "jouw_profiel";
 const METRICS = [
   ["weight", "Gewicht", "weight", "kg"], ["bmi", "BMI", "bmi", ""],
@@ -53,11 +53,12 @@ const LEVEL_COLORS = {
 // codes, not ISO ones, matching normalizeLanguage()'s output: "jp" (not
 // "ja"), "rus" (not "ru"), "csy" (not "cs"), and "fa" (FITAGE's code for
 // French, not Persian - see normalizeLanguage() below). The English
-// "above_average"/"below_average"/"excellent" values are the app's
-// effective, currently-displayed text, proven from its own
-// appSpecialTranslation override merged over the base translation/en.json
+// "above_average"/"below_average"/"excellent"/"not_standard"/"standard"
+// values are the app's effective, currently-displayed text, proven from its
+// own appSpecialTranslation override merged over the base translation/en.json
 // (whose unmerged, raw values are "Above Average"/"Below Average"/
-// "Adequate" - never shown as such by the real app).
+// "Adequate"/"Insufficient"/"Sufficient" - never shown as such by the real
+// app).
 const LEVEL_LABELS = {
   above_average: { en: "Above average", nl: "Bovengemiddeld", de: "Überdurchschnittlich", es: "Por encima del promedio", it: "Sopra la media", ar: "فوق المتوسط", pt: "Acima da média", tr: "Ortalamanın üstü", hu: "Átlagon felüli", pl: "Powyżej przeciętnej", ro: "Peste medie", sk: "Nad priemerom", th: "เกินค่าเฉลี่ย", vi: " Trên mức trung bình", ko: "평균 이상", jp: "平均以上", rus: "Свыше нормы", csy: "Nad průměrem", zh_CN: "高于平均值", zh_TW: "高於平均值", fa: "Au-dessus de la moyenne" },
   acceptable: { en: "Acceptable", nl: "Aanvaardbaar", de: "Annehmbar", es: "Aceptable", it: "Accettabile ", ar: "مقبول", pt: "Aceitável", tr: "Normal", hu: "Elfogadható", pl: "Akceptowalny", ro: "Acceptabil", sk: "Prijateľný", th: "ยอมรับได้", vi: " Chấp nhận được", ko: "허용", jp: "許容できる", rus: "Приемлемо", csy: "Přijatelný", zh_CN: "可接受的", zh_TW: "可接受的", fa: "Acceptable" },
@@ -74,8 +75,10 @@ const LEVEL_LABELS = {
   insufficient: { en: "Inadequate", nl: "Ontoereikend", de: "Unzureichend", es: "inadecuado", it: "Inadeguato", ar: "غير كافي", pt: "Inadequado", tr: "Yetersiz", hu: "Nem megfelelő", pl: "Niewystarczający", ro: "Inadecvat", sk: "Nedostatok", th: "ไม่เพียงพอ", vi: "Không đủ", ko: "부적절한", jp: "不十分", rus: "Недопустимо", csy: "Nedostatek", zh_CN: "不足", zh_TW: "不足", fa: "Insuffisant" },
   low: { en: "Low", nl: "Laag", de: "Niedrig", es: "Bajo", it: "Basso", ar: "منخفض", pt: "Baixo", tr: "Düşük", hu: "Alacsony", pl: "Niski", ro: "Scăzut", sk: "Nízky", th: "ต่ำ", vi: "Thấp", ko: "표준이하", jp: "低い", rus: "Низкий", csy: "Nízký", zh_CN: "偏低", zh_TW: "偏低", fa: "Faible" },
   normal: { en: "Normal", nl: "Normaal", de: "Normal", es: "Normal", it: "Normale", ar: "عادي", pt: "Normal", tr: "Normal", hu: "Normál", pl: "Prawidłowa waga", ro: "Normal", sk: "Štandardné", th: "มาตรฐาน", vi: " Bình thường", ko: "정상체중", jp: "正常", rus: "Нормальный вес", csy: "Normální", zh_CN: "正常", zh_TW: "正常", fa: "Ordinaire" },
+  not_standard: { en: "Standard Not Met", nl: "Standaard niet gehaald", de: "Standard nicht erfüllt", es: "insuficiente", it: "Insufficiente", ar: "لا يلبي المعايير", pt: "Não conseguir o padrão", tr: "Standardı Karşılamıyor", hu: "Átlag nincs elérve", pl: "Nie spełnia standardów", ro: "Nu corespunde standardului", sk: "Nespĺňa štandard", th: "ต่ำกว่ามาตรฐาน", vi: "Không đủ", ko: "표준치 미달", jp: "基準を満たしていない", rus: "Недостаточно", csy: "Nesplňuje standard", zh_CN: "不达标", zh_TW: "不達標", fa: "Non conforme à la norme" },
   obesity: { en: "Obesity", nl: "Obese", de: "Adipositas", es: "Obesidad", it: "Obesità ", ar: "بدانة", pt: "Obesidade", tr: "Obezite", hu: "Elhízottság", pl: "Otyłość", ro: "Obezitatea", sk: "Obezita", th: "โรคอ้วน", vi: " Béo phì", ko: "비만", jp: "肥満", rus: "Ожирение", csy: "Obezita", zh_CN: "肥胖", zh_TW: "肥胖", fa: "Obésité" },
   overweight: { en: "Overweight", nl: "Overgewicht", de: "Übergewicht", es: "Sobrepeso", it: "Sovrappeso", ar: "زيادة الوزن", pt: "Excesso de peso", tr: "Yüksek", hu: "Túlsúly", pl: "Nadwaga", ro: "Supraponderal", sk: "Nadváha", th: "น้ำหนักเกิน", vi: " Thừa cân", ko: "과체중", jp: "太りすぎ", rus: "Избыточная масса тела", csy: "Nadváha", zh_CN: "超重", zh_TW: "超重", fa: "Surpoids" },
+  standard: { en: "Standard", nl: "Standaard", de: "Standard", es: "Cumplida", it: "Soddisfa gli standard", ar: "يلبي المعايير", pt: "Conseguir o padrão", tr: "Standart", hu: "Átlag elérve", pl: "Standardowy", ro: "Corespunde Standardului", sk: "Spĺňa štandard", th: "อยู่ในระดับมาตรฐาน", vi: "Đạt tiêu chuẩn", ko: "표준", jp: "基準を満たす", rus: "Стандартный", csy: "Splňuje standard", zh_CN: "达标", zh_TW: "達標", fa: "Conforme à la norme" },
   underweight: { en: "Underweight", nl: "Ondergewicht", de: "Untergewicht", es: "Bajo de peso", it: "Sottopeso", ar: "نقص الوزن", pt: "Abaixo do peso", tr: "Zayıf", hu: "Alsúlyú", pl: "Niedowaga", ro: "Subponderalitate", sk: "Podváha", th: "น้ำหนักต่ำกว่าเกณฑ์", vi: " Thiếu cân", ko: "측정량 부족", jp: "アンダーウェイト", rus: "Дефицит массы тела", csy: "Podváha", zh_CN: "重量不足", zh_TW: "重量不足", fa: "Poids insuffisant" },
 };
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;

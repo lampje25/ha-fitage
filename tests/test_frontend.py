@@ -67,8 +67,10 @@ EXPECTED_LEVEL_LABELS = {
     "insufficient": {"en": "Inadequate", "nl": "Ontoereikend", "de": "Unzureichend", "es": "inadecuado", "it": "Inadeguato", "ar": "غير كافي", "pt": "Inadequado", "tr": "Yetersiz", "hu": "Nem megfelelő", "pl": "Niewystarczający", "ro": "Inadecvat", "sk": "Nedostatok", "th": "ไม่เพียงพอ", "vi": "Không đủ", "ko": "부적절한", "jp": "不十分", "rus": "Недопустимо", "csy": "Nedostatek", "zh_CN": "不足", "zh_TW": "不足", "fa": "Insuffisant"},
     "low": {"en": "Low", "nl": "Laag", "de": "Niedrig", "es": "Bajo", "it": "Basso", "ar": "منخفض", "pt": "Baixo", "tr": "Düşük", "hu": "Alacsony", "pl": "Niski", "ro": "Scăzut", "sk": "Nízky", "th": "ต่ำ", "vi": "Thấp", "ko": "표준이하", "jp": "低い", "rus": "Низкий", "csy": "Nízký", "zh_CN": "偏低", "zh_TW": "偏低", "fa": "Faible"},
     "normal": {"en": "Normal", "nl": "Normaal", "de": "Normal", "es": "Normal", "it": "Normale", "ar": "عادي", "pt": "Normal", "tr": "Normal", "hu": "Normál", "pl": "Prawidłowa waga", "ro": "Normal", "sk": "Štandardné", "th": "มาตรฐาน", "vi": " Bình thường", "ko": "정상체중", "jp": "正常", "rus": "Нормальный вес", "csy": "Normální", "zh_CN": "正常", "zh_TW": "正常", "fa": "Ordinaire"},
+    "not_standard": {"en": "Standard Not Met", "nl": "Standaard niet gehaald", "de": "Standard nicht erfüllt", "es": "insuficiente", "it": "Insufficiente", "ar": "لا يلبي المعايير", "pt": "Não conseguir o padrão", "tr": "Standardı Karşılamıyor", "hu": "Átlag nincs elérve", "pl": "Nie spełnia standardów", "ro": "Nu corespunde standardului", "sk": "Nespĺňa štandard", "th": "ต่ำกว่ามาตรฐาน", "vi": "Không đủ", "ko": "표준치 미달", "jp": "基準を満たしていない", "rus": "Недостаточно", "csy": "Nesplňuje standard", "zh_CN": "不达标", "zh_TW": "不達標", "fa": "Non conforme à la norme"},
     "obesity": {"en": "Obesity", "nl": "Obese", "de": "Adipositas", "es": "Obesidad", "it": "Obesità ", "ar": "بدانة", "pt": "Obesidade", "tr": "Obezite", "hu": "Elhízottság", "pl": "Otyłość", "ro": "Obezitatea", "sk": "Obezita", "th": "โรคอ้วน", "vi": " Béo phì", "ko": "비만", "jp": "肥満", "rus": "Ожирение", "csy": "Obezita", "zh_CN": "肥胖", "zh_TW": "肥胖", "fa": "Obésité"},
     "overweight": {"en": "Overweight", "nl": "Overgewicht", "de": "Übergewicht", "es": "Sobrepeso", "it": "Sovrappeso", "ar": "زيادة الوزن", "pt": "Excesso de peso", "tr": "Yüksek", "hu": "Túlsúly", "pl": "Nadwaga", "ro": "Supraponderal", "sk": "Nadváha", "th": "น้ำหนักเกิน", "vi": " Thừa cân", "ko": "과체중", "jp": "太りすぎ", "rus": "Избыточная масса тела", "csy": "Nadváha", "zh_CN": "超重", "zh_TW": "超重", "fa": "Surpoids"},
+    "standard": {"en": "Standard", "nl": "Standaard", "de": "Standard", "es": "Cumplida", "it": "Soddisfa gli standard", "ar": "يلبي المعايير", "pt": "Conseguir o padrão", "tr": "Standart", "hu": "Átlag elérve", "pl": "Standardowy", "ro": "Corespunde Standardului", "sk": "Spĺňa štandard", "th": "อยู่ในระดับมาตรฐาน", "vi": "Đạt tiêu chuẩn", "ko": "표준", "jp": "基準を満たす", "rus": "Стандартный", "csy": "Splňuje standard", "zh_CN": "达标", "zh_TW": "達標", "fa": "Conforme à la norme"},
     "underweight": {"en": "Underweight", "nl": "Ondergewicht", "de": "Untergewicht", "es": "Bajo de peso", "it": "Sottopeso", "ar": "نقص الوزن", "pt": "Abaixo do peso", "tr": "Zayıf", "hu": "Alsúlyú", "pl": "Niedowaga", "ro": "Subponderalitate", "sk": "Podváha", "th": "น้ำหนักต่ำกว่าเกณฑ์", "vi": " Thiếu cân", "ko": "측정량 부족", "jp": "アンダーウェイト", "rus": "Дефицит массы тела", "csy": "Podváha", "zh_CN": "重量不足", "zh_TW": "重量不足", "fa": "Poids insuffisant"},
 }
 
@@ -297,6 +299,8 @@ const COLOR_CASES = [
   ["acceptable", "#60BD36"],
   ["obesity", "#DE7A38"], // dark orange
   ["excessive", "#DE7A38"], // dark orange
+  ["not_standard", "#3A9BE6"], // bmr: below the official reference
+  ["standard", "#46C083"], // bmr: at or above the official reference
 ];
 for (const [assessment, hex] of COLOR_CASES) {
   const html = renderCurrentCell(assessment);
@@ -312,6 +316,8 @@ const NL_LABEL_CASES = [
   ["below_average", "Ondergemiddeld"],
   ["above_average", "Bovengemiddeld"],
   ["essential_fat", "Essentieel Vet"],
+  ["not_standard", "Standaard niet gehaald"],
+  ["standard", "Standaard"],
 ];
 for (const [assessment, text] of NL_LABEL_CASES) {
   const html = renderCurrentCell(assessment);
@@ -326,6 +332,10 @@ const EN_LABEL_CASES = [
   ["normal", "Normal"],
   ["excellent", "Excellent"],
   ["below_average", "Below average"],
+  // official, effective (override-merged) text - not the raw, unmerged
+  // translation/en.json text ("Insufficient"/"Sufficient").
+  ["not_standard", "Standard Not Met"],
+  ["standard", "Standard"],
 ];
 for (const [assessment, text] of EN_LABEL_CASES) {
   const html = renderCurrentCell(assessment, {
@@ -1058,8 +1068,8 @@ def test_bundled_card_ships_in_the_expected_distribution_location() -> None:
     assert CARD_PATH.is_file()
 
 
-def test_bundled_card_is_version_0_6_2() -> None:
-    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.2";')
+def test_bundled_card_is_version_0_6_3() -> None:
+    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.3";')
 
 
 def test_card_version_constant_matches_the_javascript_version() -> None:
@@ -1097,7 +1107,7 @@ def test_static_url_path_matches_the_bundled_card() -> None:
 
 
 def test_module_url_is_exactly_the_expected_value() -> None:
-    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.2"
+    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.3"
 
 
 def test_default_stub_profile_shows_a_neutral_instruction_in_source() -> None:
@@ -1690,15 +1700,15 @@ async def test_older_integrated_version_is_updated_in_place() -> None:
 
 
 @run_async
-async def test_resource_updates_from_v0_6_1_to_v0_6_2() -> None:
+async def test_resource_updates_from_v0_6_2_to_v0_6_3() -> None:
     """The real-world upgrade this release ships: the previously-registered
-    v0.6.1 Lovelace resource must update in place to v0.6.2, not duplicate."""
+    v0.6.2 Lovelace resource must update in place to v0.6.3, not duplicate."""
     hass, resources = storage_lovelace_data(
         {
             "fitage-id": {
                 "id": "fitage-id",
                 "type": "module",
-                "url": "/fitage/fitage-card.js?v=0.6.1",
+                "url": "/fitage/fitage-card.js?v=0.6.2",
             }
         }
     )
@@ -1707,7 +1717,7 @@ async def test_resource_updates_from_v0_6_1_to_v0_6_2() -> None:
     items = resources.async_items()
     assert len(items) == 1
     assert items[0]["id"] == "fitage-id"
-    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.2"
+    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.3"
     assert items[0]["url"] == MODULE_URL
 
 

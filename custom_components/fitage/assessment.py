@@ -34,8 +34,10 @@ ASSESSMENT_LABELS = {
     "insufficient": "Insufficient",
     "low": "Low",
     "normal": "Normal",
+    "not_standard": "Standard Not Met",
     "obesity": "Obesity",
     "overweight": "Overweight",
+    "standard": "Standard",
     "underweight": "Underweight",
 }
 
@@ -438,7 +440,7 @@ def assess_measurement(
                 - 80
             )
             assessments["bmr"] = Assessment(
-                "below_average" if bmr < reference else "above_average",
+                "not_standard" if bmr < reference else "standard",
                 assessment_height=_display_number(height),
                 reference_bmr=float(_display_number(reference)),
             )
