@@ -327,9 +327,7 @@ def test_bone_ratio_bounds_are_the_same_regardless_of_weight(
     assert result["bone_ratio"]["normal_max"] == pytest.approx(upper)
 
 
-@pytest.mark.parametrize(
-    "weight", [None, 0, -1, "invalid", math.nan, math.inf, True]
-)
+@pytest.mark.parametrize("weight", [None, 0, -1, "invalid", math.nan, math.inf, True])
 def test_bone_and_bone_ratio_require_a_valid_weight(weight: object) -> None:
     """Without a known current weight, neither the kilogram bounds nor the
     ratio itself can be computed - no assessment must be added, never one
@@ -341,9 +339,7 @@ def test_bone_and_bone_ratio_require_a_valid_weight(weight: object) -> None:
     assert "bone_ratio" not in result
 
 
-@pytest.mark.parametrize(
-    "bone", [None, "invalid", math.nan, math.inf, -1, True, 999]
-)
+@pytest.mark.parametrize("bone", [None, "invalid", math.nan, math.inf, -1, True, 999])
 def test_bone_and_bone_ratio_require_a_valid_bone_measurement(bone: object) -> None:
     """999 exceeds _known_measurement()'s weight (95.15 kg) and is rejected
     by the same physical-plausibility bound (bone mass cannot exceed body
@@ -410,9 +406,10 @@ def _bmr_reference(height: float, weight: float, age: int, gender: int) -> float
     """Independently reproduce the official BMR reference formula (unchanged
     by this fix) for use as test oracle, without relying on assess_measurement
     itself for the value under test."""
-    return 24 * (0.0061 * height + 0.0128 * weight - 0.1529) * _bmr_factor(
-        age, gender
-    ) - 80
+    return (
+        24 * (0.0061 * height + 0.0128 * weight - 0.1529) * _bmr_factor(age, gender)
+        - 80
+    )
 
 
 @pytest.mark.parametrize(
@@ -438,9 +435,7 @@ def test_bmr_reference_formula_is_unchanged(
     expected_reference = _bmr_reference(height, weight, age, gender)
     measurement["bmr"] = expected_reference
     result = assess_measurement(measurement, {"area_code": "NL"})
-    assert result["bmr"]["reference_bmr"] == pytest.approx(
-        expected_reference, abs=0.01
-    )
+    assert result["bmr"]["reference_bmr"] == pytest.approx(expected_reference, abs=0.01)
     assert result["bmr"]["assessment"] == "standard"
 
 
@@ -452,7 +447,9 @@ def test_bmr_boundaries_below_at_and_above_reference(gender: int) -> None:
     measurement = _known_measurement()
     measurement["gender"] = gender
     age = _measurement_age(measurement)
-    reference = _bmr_reference(measurement["height"], measurement["weight"], age, gender)
+    reference = _bmr_reference(
+        measurement["height"], measurement["weight"], age, gender
+    )
     for bmr, expected in (
         (reference - 0.01, "not_standard"),
         (reference, "standard"),
@@ -463,9 +460,7 @@ def test_bmr_boundaries_below_at_and_above_reference(gender: int) -> None:
         assert result["bmr"]["assessment"] == expected
 
 
-@pytest.mark.parametrize(
-    "bmr", [None, "invalid", math.nan, math.inf, -1, True]
-)
+@pytest.mark.parametrize("bmr", [None, "invalid", math.nan, math.inf, -1, True])
 def test_missing_or_invalid_bmr_value_omits_bmr_assessment(bmr: object) -> None:
     measurement = _known_measurement()
     measurement["bmr"] = bmr
@@ -473,9 +468,7 @@ def test_missing_or_invalid_bmr_value_omits_bmr_assessment(bmr: object) -> None:
     assert "bmr" not in result
 
 
-@pytest.mark.parametrize(
-    "weight", [None, 0, -1, "invalid", math.nan, math.inf, True]
-)
+@pytest.mark.parametrize("weight", [None, 0, -1, "invalid", math.nan, math.inf, True])
 def test_bmr_requires_a_valid_weight(weight: object) -> None:
     measurement = _known_measurement()
     measurement["weight"] = weight
