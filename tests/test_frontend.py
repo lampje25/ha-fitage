@@ -511,6 +511,375 @@ EXPECTED_LEVEL_LABELS = {
     },
 }
 
+# The exact official FITAGE metric titles bundled in fitage-card.js's
+# METRIC_LABELS, keyed by the card's own internal METRICS key, for all 21
+# supported languages. Six Dutch values are deliberately overridden from the
+# literal official app text (see the matching comment above METRIC_LABELS in
+# fitage-card.js for why): protein, protein_mass, bmr, fat_free_weight,
+# body_fat_mass, body_water_mass.
+EXPECTED_METRIC_LABELS = {
+    "weight": {
+        "en": "Weight",
+        "nl": "Gewicht",
+        "de": "Gewicht",
+        "es": "Peso",
+        "it": "Peso",
+        "ar": "الوزن",
+        "pt": "Peso",
+        "tr": "Ağırlık",
+        "hu": "Súly",
+        "pl": "Waga",
+        "ro": "Greutate",
+        "sk": "Hmotnosť",
+        "th": "น้ำหนัก",
+        "vi": " Cân nặng",
+        "ko": "체중",
+        "jp": "体重",
+        "rus": "Вес",
+        "csy": "Hmotnost",
+        "zh_CN": "体重",
+        "zh_TW": "體重",
+        "fa": "Poids",
+    },
+    "bmi": {
+        "en": "BMI",
+        "nl": "BMI",
+        "de": "BMI",
+        "es": "IMC",
+        "it": "BMI",
+        "ar": "مؤشر كتلة الجسم",
+        "pt": "BMI",
+        "tr": "VKİ",
+        "hu": "BMI",
+        "pl": "BMI",
+        "ro": "IMC",
+        "sk": "BMI",
+        "th": "ดัชนีมวลกาย",
+        "vi": "Chỉ số khối cơ thể",
+        "ko": "BMI",
+        "jp": "BMI",
+        "rus": "Индекс массы тела",
+        "csy": "BMI",
+        "zh_CN": "BMI",
+        "zh_TW": "BMI",
+        "fa": "IMC",
+    },
+    "bodyfat": {
+        "en": "Body fat",
+        "nl": "Lichaamsvet",
+        "de": "Körperfett",
+        "es": "Grasa corporal",
+        "it": "Grasso corporeo",
+        "ar": "دهون الجسم",
+        "pt": "Gordura corporal",
+        "tr": "Vücut Yağ Oranı ",
+        "hu": "Testzsír",
+        "pl": "Tłuszcz ciała",
+        "ro": "Grăsime corp.",
+        "sk": "Telesný tuk",
+        "th": "ไขมัน",
+        "vi": "Lượng mỡ cơ thể",
+        "ko": "체내 지방율",
+        "jp": "体脂肪率",
+        "rus": "Содержание жира",
+        "csy": "Tělesný tuk",
+        "zh_CN": "脂肪率",
+        "zh_TW": "脂肪率",
+        "fa": "Graisse corporelle",
+    },
+    "water": {
+        "en": "Body water",
+        "nl": "Lichaamswater",
+        "de": "Körperwasser",
+        "es": "Agua corporal",
+        "it": "Idratazione",
+        "ar": "مياه الجسم",
+        "pt": "Lìquido corporal",
+        "tr": "Vücut Suyu",
+        "hu": "Test Víz",
+        "pl": "Zawartość wody w organiźmie",
+        "ro": "Nivel hidratare",
+        "sk": "Telesná voda",
+        "th": "น้ำในร่างกาย",
+        "vi": " Lượng nước cơ thể",
+        "ko": "체내 수분",
+        "jp": "体水分率",
+        "rus": "Содержание воды в организме",
+        "csy": "Tělesná voda",
+        "zh_CN": "体水份",
+        "zh_TW": "體水份",
+        "fa": "Eau Corporelle Totale",
+    },
+    "muscle": {
+        "en": "Muscle Mass Percentage",
+        "nl": "Spierverhouding",
+        "de": "Muskelanteil",
+        "es": "Índice de Masa Muscular",
+        "it": "Rapporto muscolare",
+        "ar": "معدل العضلات",
+        "pt": "Proporção muscular",
+        "tr": "Kas oranı",
+        "hu": "Izom arány",
+        "pl": "Stosunek mięśniowy",
+        "ro": "Rata musculară",
+        "sk": "Pomer svalov",
+        "th": "อัตราส่วนกล้ามเนื้อ",
+        "vi": "Tỷ lệ cơ bắp",
+        "ko": "근육 비율",
+        "jp": "筋肉比率",
+        "rus": "Мышечное соотношение",
+        "csy": "svalový poměr",
+        "zh_CN": "肌肉率",
+        "zh_TW": "肌肉率",
+        "fa": "Ratio musculaire",
+    },
+    "protein": {
+        "en": "Protein",
+        "nl": "Eiwit",
+        "de": "Protein",
+        "es": "Proteína",
+        "it": "Proteine",
+        "ar": "بروتين",
+        "pt": "Proteína",
+        "tr": "Protein",
+        "hu": "Protein",
+        "pl": "Białko",
+        "ro": "Proteină",
+        "sk": "Proteín",
+        "th": "โปรตีน",
+        "vi": "Protein",
+        "ko": "단백질",
+        "jp": "タンパク質",
+        "rus": "Белки",
+        "csy": "Protein",
+        "zh_CN": "蛋白质",
+        "zh_TW": "蛋白質",
+        "fa": "Protéine",
+    },
+    "bone": {
+        "en": "Bone Mass",
+        "nl": "Botmassa",
+        "de": "Knochenmasse",
+        "es": "Masa ósea",
+        "it": "Massa ossea",
+        "ar": "كتلة العظام",
+        "pt": "Massa óssea",
+        "tr": "Kemik Kütlesi",
+        "hu": "Csont tömeg",
+        "pl": "Masa kości",
+        "ro": "Masă osoasă",
+        "sk": "Kostná hmota",
+        "th": "มวลกระดูก",
+        "vi": " Khối lượng xương",
+        "ko": "골격(뼈)량",
+        "jp": "骨量",
+        "rus": "Костная масса",
+        "csy": "Kostní hmota",
+        "zh_CN": "骨量",
+        "zh_TW": "骨量",
+        "fa": "Masse osseuse",
+    },
+    "subfat": {
+        "en": "Subcutaneous fat",
+        "nl": "Onderhuids vet",
+        "de": "Subkutanes Fett",
+        "es": "Índice de grasa subcutánea",
+        "it": "Grasso sottocutaneo",
+        "ar": "دهون تحت الجلد",
+        "pt": "Gordura subcutânea",
+        "tr": "Deri Altı Yağ Oranı",
+        "hu": "Szubkután zsír",
+        "pl": "Tłuszcz podskórny",
+        "ro": "Grăsime subcutanată",
+        "sk": "Podkožný tuk",
+        "th": "ไขมันใต้ผิวหนัง",
+        "vi": " Mỡ dưới da",
+        "ko": "피하 지방",
+        "jp": "皮下脂肪",
+        "rus": "Подкожно-жировая клетчатка",
+        "csy": "Podkožní tuk",
+        "zh_CN": "皮下脂肪率",
+        "zh_TW": "皮下脂肪",
+        "fa": "Graisse sous-cutanée",
+    },
+    "fat_free_weight": {
+        "en": "Fat-Free Body Weight",
+        "nl": "Vetvrij gewicht",
+        "de": "Fettfreie Masse",
+        "es": "Peso sin grasa",
+        "it": "Peso corporeo senza grassi",
+        "ar": "وزن الجسم بدون دهون",
+        "pt": "Peso corporal sem gordura",
+        "tr": "Yağsız Vücut Ağırlığı",
+        "hu": "Zsírmentes testsúly",
+        "pl": "Masa ciała bez tłuszczu",
+        "ro": "Greutate corporală fără grăsime",
+        "sk": "Hmotnosť bez tuku",
+        "th": "มวลร่างกายไร้ไขมัน",
+        "vi": " Trọng lượng cơ thể không béo",
+        "ko": "총지방 제거 체중",
+        "jp": "除脂肪体重",
+        "rus": "Масса тела без учета жира",
+        "csy": "Hmotnost bez tuku",
+        "zh_CN": "去脂体重",
+        "zh_TW": "去脂體重",
+        "fa": "Poids hors masse grasse",
+    },
+    "body_fat_mass": {
+        "en": "Fat mass",
+        "nl": "Vetmassa",
+        "de": "Körperfettmasse",
+        "es": "Masa grasa corporal",
+        "it": "Massa grassa corporea",
+        "ar": "كتلة الدهون في الجسم",
+        "pt": "Massa gorda corporal",
+        "tr": "Vücut Yağ Kitlesi",
+        "hu": "Testzsír tömege",
+        "pl": "Masa tłuszczu ciała",
+        "ro": "Masă grasă corporală",
+        "sk": "Hmotnosť telesného tuku",
+        "th": "มวลไขมันในร่างกาย",
+        "vi": "Khối lượng mỡ trong cơ thể",
+        "ko": "체내 지방량",
+        "jp": "体脂肪量",
+        "rus": "Масса жира в теле",
+        "csy": "Tělesná tuková hmota",
+        "zh_CN": "体脂肪量",
+        "zh_TW": "體脂肪量",
+        "fa": "Masse grasse corporelle",
+    },
+    "body_water_mass": {
+        "en": "Body Water Mass",
+        "nl": "Watermassa",
+        "de": "Wassermasse im Körper",
+        "es": "Masa de agua corporal",
+        "it": "Massa d'acqua corporea",
+        "ar": "محتوى الماء في الجسم",
+        "pt": "Massa de água corporal",
+        "tr": "Vücut Su Kütlesi",
+        "hu": "Testvíz tömege",
+        "pl": "Masa wody w ciele",
+        "ro": "Masă de apă în corp",
+        "sk": "Hmotnosť vody v tele",
+        "th": "มวลน้ำในร่างกาย",
+        "vi": "Khối lượng nước trong cơ thể",
+        "ko": "체내 수분량",
+        "jp": "体水分量",
+        "rus": "Масса воды в теле",
+        "csy": "Obsah vody v těle",
+        "zh_CN": "体水分量",
+        "zh_TW": "體水分量",
+        "fa": "Masse d'eau corporelle",
+    },
+    "protein_mass": {
+        "en": "Protein Mass",
+        "nl": "Eiwitmassa",
+        "de": "Proteinmasse",
+        "es": "Masa de proteínas",
+        "it": "Massa proteica",
+        "ar": "كتلة البروتين",
+        "pt": "Massa de proteína",
+        "tr": "Protein kütle",
+        "hu": "Fehérjemennyiség",
+        "pl": "Masa białka",
+        "ro": "Masă de proteine",
+        "sk": "Hmotnosť bielkovín",
+        "th": "มวลโปรตีน",
+        "vi": "Khối lượng protein",
+        "ko": "단백질 질량",
+        "jp": "タンパク質量",
+        "rus": "Масса белка",
+        "csy": "Hmotnost bílkovin",
+        "zh_CN": "蛋白质质量",
+        "zh_TW": "蛋白質質量",
+        "fa": "Masse protéique",
+    },
+    "bmr": {
+        "en": "BMR",
+        "nl": "Basaal metabolisme",
+        "de": "Grundumsatz",
+        "es": "TMB",
+        "it": "BMR",
+        "ar": "معدل الأيض الأساسي",
+        "pt": "BMR",
+        "tr": "Bazal Metabolizma Hızı",
+        "hu": "BMR",
+        "pl": "BMR (podstawowa przemiana materii)",
+        "ro": "RMB",
+        "sk": "BMR",
+        "th": "อัตราการเผาผลาญขณะพัก",
+        "vi": " BMR",
+        "ko": "기초대사량",
+        "jp": "基礎代謝量",
+        "rus": "Скорость обмена веществ",
+        "csy": "BMR",
+        "zh_CN": "基础代谢量",
+        "zh_TW": "基礎代謝量",
+        "fa": "Taux métab. debase",
+    },
+    "score": {
+        "en": "Health Score",
+        "nl": "Gezondheidsscore",
+        "de": "Gesundheitspunktzahl",
+        "es": "Puntuación de salud",
+        "it": "Punteggio di salute",
+        "ar": "نقاط الصحة",
+        "pt": "Pontuação de saúde",
+        "tr": "Sağlık Skoru",
+        "hu": "Egészségpontszám",
+        "pl": "Wynik zdrowia",
+        "ro": "Scor de sănătate",
+        "sk": "Skóre zdravia",
+        "th": "คะแนนสุขภาพ",
+        "vi": "Điểm sức khỏe",
+        "ko": "건강 점수",
+        "jp": "健康スコア",
+        "rus": "Оценка здоровья",
+        "csy": "Zdravotní skóre",
+        "zh_CN": "健康分数",
+        "zh_TW": "健康分數",
+        "fa": "Score de santé",
+    },
+}
+
+# The official FITAGE translation key "current" (proven present and
+# non-empty in all 21 supported languages, with the appSpecialTranslation
+# override applied for English), used for the "current value" label - with
+# one deliberate exception: Thai ("th") is intentionally left out. The
+# official Thai string for this key, "กระแสน้ำ", means "water current"/
+# "tide", not "current value", and would mislabel every metric's present-day
+# reading. "th" must therefore fall through to the English fallback
+# ("Current") instead of ever carrying an entry here; see
+# EXPECTED_CURRENT_LABEL_FALLBACK_LANGUAGES below and the matching comment
+# on CURRENT_LABELS in fitage-card.js.
+EXPECTED_CURRENT_LABELS = {
+    "en": "Current",
+    "nl": "Huidig",
+    "de": "Aktuell",
+    "es": "Actual",
+    "it": "Attuale",
+    "ar": "حالي",
+    "pt": "Atual",
+    "tr": "Güncel",
+    "hu": "aktuális",
+    "pl": "Aktualnie",
+    "ro": "curent",
+    "sk": "aktuálny",
+    "vi": "Hiện tại",
+    "ko": "현재",
+    "jp": "現在",
+    "rus": "Текущий",
+    "csy": "aktuální",
+    "zh_CN": "当前",
+    "zh_TW": "當前",
+    "fa": "En cours",
+}
+
+# Languages that must NOT have their own CURRENT_LABELS entry and must fall
+# back to the English "Current" - currently only Thai, due to its official
+# app text being a false friend ("water current", not "current value").
+EXPECTED_CURRENT_LABEL_FALLBACK_LANGUAGES = {"th"}
+
 
 def _find_node() -> str | None:
     """Locate a Node.js runtime for real JS-behavior tests. Falls back to
@@ -593,9 +962,13 @@ _FORMAT_JS_HARNESS = (
     _LOAD_CARD_JS_PRELUDE
     + r"""
 const cases = CASES;
+// format() now reads hass.locale (Dutch number formatting is no longer a
+// fixed "nl-NL" default) - bind the same Dutch locale these pre-existing
+// cases were always written against, so their expected output is unchanged.
+const dutchHass = { locale: { language: "nl", number_format: "language" } };
 const failures = [];
 for (const [value, unit, key, expected] of cases) {
-  const actual = Card.prototype.format(value, unit, key);
+  const actual = Card.prototype.format.call({ _hass: dutchHass }, value, unit, key);
   if (actual !== expected) {
     failures.push(`format(${JSON.stringify(value)}, ${JSON.stringify(unit)}, ${JSON.stringify(key)}) = ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
   }
@@ -1505,8 +1878,8 @@ def test_bundled_card_ships_in_the_expected_distribution_location() -> None:
     assert CARD_PATH.is_file()
 
 
-def test_bundled_card_is_version_0_6_3() -> None:
-    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.3";')
+def test_bundled_card_is_version_0_6_4() -> None:
+    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.4";')
 
 
 def test_card_version_constant_matches_the_javascript_version() -> None:
@@ -1544,7 +1917,7 @@ def test_static_url_path_matches_the_bundled_card() -> None:
 
 
 def test_module_url_is_exactly_the_expected_value() -> None:
-    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.3"
+    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.4"
 
 
 def test_default_stub_profile_shows_a_neutral_instruction_in_source() -> None:
@@ -1958,6 +2331,379 @@ console.log("===LEVEL_LABELS_JSON_END===");
 
 
 @pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_all_metric_titles_and_current_label_match_the_official_text() -> None:
+    """METRIC_LABELS (all 14 metrics) and CURRENT_LABELS must match
+    EXPECTED_METRIC_LABELS/EXPECTED_CURRENT_LABELS exactly, read back from
+    the real, bundled objects - including the six deliberate Dutch
+    exceptions - and must never claim any of the not-yet-implemented FITAGE
+    codes. Same dump-and-compare technique as LEVEL_LABELS, for the same
+    `const`-scoping reason documented on that test."""
+    harness = r"""
+class FakeElement {
+  attachShadow() { this.shadowRoot = { innerHTML: "", querySelector: () => null, querySelectorAll: () => [] }; return this.shadowRoot; }
+}
+global.HTMLElement = FakeElement;
+global.customElements = { registry: new Map(), get(n){return this.registry.get(n)}, define(n,c){this.registry.set(n,c)} };
+global.window = { customCards: undefined, loadCardHelpers: async () => ({ createCardElement: () => ({}) }) };
+global.document = { createElement: () => ({}) };
+
+const fs = require("fs");
+const src = fs.readFileSync(CARD_PATH, "utf8");
+eval(src + `
+console.log("===METRIC_LABELS_JSON_START===");
+console.log(JSON.stringify({metrics: METRIC_LABELS, current: CURRENT_LABELS}));
+console.log("===METRIC_LABELS_JSON_END===");
+`);
+"""
+    result = _run_node_js(harness)
+    assert result.returncode == 0, result.stdout + result.stderr
+    match = re.search(
+        r"===METRIC_LABELS_JSON_START===\n(.*)\n===METRIC_LABELS_JSON_END===",
+        result.stdout,
+        re.DOTALL,
+    )
+    assert match is not None, result.stdout + result.stderr
+    dumped = json.loads(match.group(1))
+    actual_metrics = dumped["metrics"]
+    actual_current = dumped["current"]
+
+    not_yet_implemented = {"da", "sv", "fi", "no", "el", "is"}
+    failures: list[str] = []
+    for key, expected_by_lang in EXPECTED_METRIC_LABELS.items():
+        actual_by_lang = actual_metrics.get(key, {})
+        for lang in not_yet_implemented:
+            if lang in actual_by_lang:
+                failures.append(f"metric {key!r} must not yet have a {lang!r} entry")
+        for lang in FITAGE_SUPPORTED_LANGUAGES:
+            actual_text = actual_by_lang.get(lang)
+            expected_text = expected_by_lang[lang]
+            if actual_text != expected_text:
+                failures.append(
+                    f"metric {key!r}[{lang!r}]: expected {expected_text!r}, got {actual_text!r}"
+                )
+    for lang in not_yet_implemented:
+        if lang in actual_current:
+            failures.append(f"current label must not yet have a {lang!r} entry")
+    for lang in EXPECTED_CURRENT_LABEL_FALLBACK_LANGUAGES:
+        if lang in actual_current:
+            failures.append(
+                f"current label must not have its own {lang!r} entry - it is a "
+                "deliberate English fallback (misleading official app text)"
+            )
+    for lang in FITAGE_SUPPORTED_LANGUAGES:
+        if lang in EXPECTED_CURRENT_LABEL_FALLBACK_LANGUAGES:
+            continue
+        actual_text = actual_current.get(lang)
+        expected_text = EXPECTED_CURRENT_LABELS[lang]
+        if actual_text != expected_text:
+            failures.append(
+                f"current[{lang!r}]: expected {expected_text!r}, got {actual_text!r}"
+            )
+    assert not failures, "\n".join(failures)
+
+
+def test_expected_metric_labels_cover_exactly_the_fourteen_card_metrics() -> None:
+    """EXPECTED_METRIC_LABELS (this test file's own record) must claim
+    exactly the 14 metric keys the card's own METRICS array defines - no
+    more, no less - read directly from fitage-card.js, not re-typed."""
+    content = CARD_PATH.read_text(encoding="utf-8")
+    metrics_block = re.search(r"const METRICS = \[(.*?)\]\.map", content, re.DOTALL)
+    assert metrics_block is not None
+    metric_keys = set(re.findall(r'\["(\w+)",', metrics_block.group(1)))
+    assert metric_keys == set(EXPECTED_METRIC_LABELS)
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_metric_titles_and_current_label_render_through_the_real_card() -> None:
+    """metricTitle()/currentLabel() must actually be wired into the
+    rendered <h2> and "current" label - verified through the real bundled
+    metricHtml(), not by re-reading METRIC_LABELS/CURRENT_LABELS directly -
+    for a supported language, an unknown language (English fallback), and
+    the editor's metric checkbox list. Never a literal "undefined", "null",
+    or the raw METRICS Dutch fallback text for a supported language."""
+    harness = (
+        _LOAD_CARD_JS_PRELUDE
+        + r"""
+const WEIGHT_METRIC = { key: "weight", title: "Gewicht", entity: "weight", unit: "kg" };
+function stateFor(assessment) {
+  return { state: "80", attributes: { normal_min: 60, normal_max: 90, unit_of_measurement: "kg", assessment } };
+}
+function renderFor(language) {
+  const el = Object.create(Card.prototype);
+  el.config = { title: "FITAGE", display: "graphs" };
+  el.slug = "test_profiel";
+  el._hass = { states: { "sensor.test_profiel_weight": stateFor("normal") }, language };
+  return el.metricHtml(WEIGHT_METRIC);
+}
+const failures = [];
+function check(label, condition) { if (!condition) failures.push(label); }
+
+check("Dutch title", renderFor("nl").includes(">Gewicht<"));
+check("Dutch current label (official 'Huidig', not 'Actueel')", renderFor("nl").includes(">Huidig<"));
+check("Japanese title", renderFor("ja").includes(">体重<"));
+check("Japanese current label", renderFor("ja").includes(">現在<"));
+const unknown = renderFor("sw");
+check("unknown language falls back to English title", unknown.includes(">Weight<"));
+check("unknown language falls back to English current label", unknown.includes(">Current<"));
+check("never a literal undefined", !unknown.includes("undefined"));
+check("never a literal null", !unknown.includes(">null<"));
+
+// Thai keeps its own (correct) official metric title, but must fall back
+// to the English "Current" label - the official Thai "current" string
+// ("กระแสน้ำ" = "water current"/"tide") is a false friend and must never
+// appear here.
+const thai = renderFor("th");
+check("Thai still uses its own official metric title", thai.includes(">น้ำหนัก<"));
+check("Thai current label falls back to English 'Current'", thai.includes(">Current<"));
+check("Thai current label never shows the misleading official app text", !thai.includes("กระแสน้ำ"));
+
+// Editor: metric checkbox labels and the "None" button both localized.
+const Editor = customElements.get("fitage-card-editor");
+const editorEl = Object.create(Editor.prototype);
+editorEl.querySelector = () => ({ addEventListener(){} });
+editorEl.querySelectorAll = () => [];
+let editorHTML = "";
+Object.defineProperty(editorEl, "innerHTML", { set(v){ editorHTML = v; }, get(){ return editorHTML; } });
+editorEl._hass = { language: "de" };
+editorEl.config = { profile: "test" };
+editorEl.render();
+check("editor metric checkbox uses the German title", editorHTML.includes(">Grundumsatz<"));
+
+if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
+console.log("ALL METRIC RENDER CHECKS PASSED");
+"""
+    )
+    result = _run_node_js(harness)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL METRIC RENDER CHECKS PASSED" in result.stdout
+
+
+_HA_LOCALIZE_JS_HARNESS = (
+    _LOAD_CARD_JS_PRELUDE
+    + r"""
+const WEIGHT_METRIC = { key: "weight", title: "Gewicht", entity: "weight", unit: "kg" };
+function stateFor(assessment) {
+  return { state: "80", attributes: { normal_min: 60, normal_max: 90, unit_of_measurement: "kg", assessment } };
+}
+function renderFor(hassExtra) {
+  const el = Object.create(Card.prototype);
+  el.config = { title: "FITAGE", display: "graphs" };
+  el.slug = "test_profiel";
+  el._hass = { states: { "sensor.test_profiel_weight": stateFor("normal") }, language: "de", ...hassExtra };
+  return el.metricHtml(WEIGHT_METRIC);
+}
+const failures = [];
+function check(label, condition) { if (!condition) failures.push(label); }
+
+// 1) A real hass.localize() with official German text is used verbatim.
+const withLocalize = renderFor({
+  localize: (key) => ({
+    "ui.panel.lovelace.editor.card.generic.minimum": "Minimum",
+    "ui.panel.lovelace.editor.card.generic.maximum": "Maximum",
+    "ui.common.loading": "Wird geladen",
+  }[key] || ""),
+});
+check("official Minimum shown", withLocalize.includes(">Minimum<"));
+check("official Maximum shown", withLocalize.includes(">Maximum<"));
+check("official German Loading shown in the graph placeholder", withLocalize.includes('id="graph-weight">Wird geladen<'));
+
+// 2) hass.localize missing entirely -> English fallback, never blank/undefined.
+const withoutLocalize = renderFor({});
+check("Minimum fallback", withoutLocalize.includes(">Minimum<"));
+check("Maximum fallback", withoutLocalize.includes(">Maximum<"));
+check("Loading fallback in the graph placeholder", withoutLocalize.includes('id="graph-weight">Loading<'));
+check("never a literal undefined", !withoutLocalize.includes("undefined"));
+
+// 3) hass.localize present but returns "" for this key (a real,
+// undocumented HA translation gap, proven for some languages) -> the same
+// English fallback, never an empty label.
+const emptyLocalize = renderFor({ localize: () => "" });
+check("empty hass.localize result still falls back to Minimum", emptyLocalize.includes(">Minimum<"));
+check("empty hass.localize result still falls back to Maximum", emptyLocalize.includes(">Maximum<"));
+check("empty hass.localize result still falls back to Loading", emptyLocalize.includes('id="graph-weight">Loading<'));
+
+// 4) The editor's "None" button uses the official ui.common.none text,
+// with the same English fallback when hass.localize is unavailable.
+const Editor = customElements.get("fitage-card-editor");
+function renderEditor(hassExtra) {
+  const el = Object.create(Editor.prototype);
+  el.querySelector = () => ({ addEventListener(){} });
+  el.querySelectorAll = () => [];
+  let html = "";
+  Object.defineProperty(el, "innerHTML", { set(v){ html = v; }, get(){ return html; } });
+  el._hass = { language: "de", ...hassExtra };
+  el.config = { profile: "test" };
+  el.render();
+  return html;
+}
+check("official 'Kein' shown for the None button", renderEditor({ localize: (k) => (k === "ui.common.none" ? "Kein" : "") }).includes('id="none">Kein<'));
+check("English 'None' fallback for the None button", renderEditor({}).includes('id="none">None<'));
+
+if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
+console.log("ALL HA LOCALIZE CHECKS PASSED");
+"""
+)
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_ha_localize_used_for_minimum_maximum_loading_and_none_with_english_fallback() -> (
+    None
+):
+    """Minimum/Maximum/Loading/None must come from the real, official
+    hass.localize() when it provides them, and fall back to the exact
+    English literal - never a blank string, "undefined", or the raw
+    localization key - when hass.localize is unavailable or itself returns
+    an empty string (a real, observed gap in some of HA's own official
+    translations, e.g. Thai/Polish/Romanian for ui.common.none)."""
+    result = _run_node_js(_HA_LOCALIZE_JS_HARNESS)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL HA LOCALIZE CHECKS PASSED" in result.stdout
+
+
+_NUMBER_FORMAT_JS_HARNESS = (
+    _LOAD_CARD_JS_PRELUDE
+    + r"""
+const failures = [];
+function check(label, condition) { if (!condition) failures.push(label); }
+function fmt(locale, value) {
+  return Card.prototype.format.call({ _hass: { locale } }, value, "kg", "weight");
+}
+
+// hass.locale.number_format, all documented values (proven from the
+// installed home-assistant-frontend bundle's own numberFormatToLocale()).
+check("nl (language default) uses a decimal comma", fmt({ language: "nl", number_format: "language" }, 1234.5) === "1.234,5 kg");
+check("en (language default) uses a decimal point", fmt({ language: "en", number_format: "language" }, 1234.5) === "1,234.5 kg");
+check("comma_decimal forces en-US style regardless of language", fmt({ language: "de", number_format: "comma_decimal" }, 1234.5) === "1,234.5 kg");
+check("decimal_comma forces de/es/it style", fmt({ language: "en", number_format: "decimal_comma" }, 1234.5) === "1.234,5 kg");
+check("space_comma uses a space thousands separator and a decimal comma", fmt({ language: "en", number_format: "space_comma" }, 1234.5) === "1 234,5 kg" || fmt({ language: "en", number_format: "space_comma" }, 1234.5) === "1 234,5 kg");
+check("quote_decimal (Swiss) uses an apostrophe thousands separator", fmt({ language: "en", number_format: "quote_decimal" }, 1234.5).includes("’") || fmt({ language: "en", number_format: "quote_decimal" }, 1234.5).includes("'"));
+check("system falls back to the runtime default locale without crashing", typeof fmt({ language: "de", number_format: "system" }, 1234.5) === "string");
+
+// German, French and Arabic follow their own language when number_format
+// simply follows the language (HA's own default for a fresh profile).
+check("de", fmt({ language: "de", number_format: "language" }, 1234.5) === "1.234,5 kg");
+check("fr", fmt({ language: "fr", number_format: "language" }, 1234.5) === "1 234,5 kg" || fmt({ language: "fr", number_format: "language" }, 1234.5) === "1 234,5 kg");
+check("ar does not crash and returns a string", typeof fmt({ language: "ar", number_format: "language" }, 1234.5) === "string");
+
+// A syntactically invalid locale must never crash - falls back to English.
+check("invalid locale never throws", (() => { try { fmt({ language: "not a locale!!" }, 1234.5); return true; } catch (e) { return false; } })());
+check("invalid locale falls back to English-style formatting", fmt({ language: "not a locale!!" }, 1234.5) === "1,234.5 kg");
+
+// A syntactically valid but unrecognized locale must not crash either.
+check("unknown-but-valid locale never throws", (() => { try { fmt({ language: "xx-XX" }, 1234.5); return true; } catch (e) { return false; } })());
+
+// Units always stay a separate, appended literal - never touched by the formatter.
+check("unit stays untranslated and separate", fmt({ language: "de", number_format: "language" }, 5, "kg") !== undefined && Card.prototype.format.call({ _hass: { locale: { language: "de", number_format: "language" } } }, 5, "kg", "weight").endsWith(" kg"));
+
+if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
+console.log("ALL NUMBER FORMAT CHECKS PASSED");
+"""
+)
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_number_formatting_follows_hass_locale_number_format() -> None:
+    """format() must reproduce Home Assistant's own official
+    hass.locale.number_format resolution (nl/en/de/fr/ar plus every
+    documented number_format value), never crash on an invalid or merely
+    unrecognized locale, and always keep the unit as a separate, untouched
+    literal appended after the formatted number."""
+    result = _run_node_js(_NUMBER_FORMAT_JS_HARNESS)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL NUMBER FORMAT CHECKS PASSED" in result.stdout
+
+
+_PERIOD_LABEL_JS_HARNESS = (
+    _LOAD_CARD_JS_PRELUDE
+    + r"""
+const failures = [];
+function check(label, condition) { if (!condition) failures.push(label); }
+
+function renderPeriods(hass) {
+  const el = Object.create(Card.prototype);
+  el.config = { title: "FITAGE", display: "graphs" };
+  el._hass = hass;
+  el.range = "1m";
+  el.ready = false;
+  el.available = [];
+  el.graphs = new Map();
+  el.shadowRoot = { querySelectorAll: () => [], querySelector: () => null };
+  el.render();
+  return el.shadowRoot.innerHTML;
+}
+
+// Representative languages, including the one proven Japanese exception.
+check("Dutch 1j label", renderPeriods({ language: "nl" }).includes('data-range="1j"')
+  && renderPeriods({ language: "nl" }).match(/data-range="1j"[^>]*>([^<]*)</)[1] === "1 jr");
+check("English 1j label uses the narrow 'y' form", renderPeriods({ language: "en" }).match(/data-range="1j"[^>]*>([^<]*)</)[1] === "1y");
+check("Japanese 1j label uses real Japanese text (short), not Latin 'jp'/'y'", renderPeriods({ language: "ja" }).match(/data-range="1j"[^>]*>([^<]*)</)[1] === "1 年");
+check("Japanese 7d label uses real Japanese text", renderPeriods({ language: "ja" }).match(/data-range="7d"[^>]*>([^<]*)</)[1] === "7 日");
+check("Arabic 1m label does not crash and is non-empty", renderPeriods({ language: "ar" }).match(/data-range="1m"[^>]*>([^<]*)</)[1].length > 0);
+check("Traditional Chinese 3m label is non-empty", renderPeriods({ language: "zh-Hant" }).match(/data-range="3m"[^>]*>([^<]*)</)[1].length > 0);
+
+// Internal range/days are never affected by language.
+const el = Object.create(Card.prototype);
+el.range = "1j";
+check("the 'days' getter for 1j stays 365 regardless of language", el.days === 365);
+
+if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
+console.log("ALL PERIOD LABEL CHECKS PASSED");
+"""
+)
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_period_button_labels_are_localized_while_internal_ranges_stay_fixed() -> None:
+    """The visible period button label must be generated per the real HA
+    language via Intl.NumberFormat's unit narrow/short form, while the
+    internal range key ("7d","14d","1m","3m","1j") and the derived `days`
+    lookup must never change with the language - proven for Dutch, English,
+    Japanese (the one confirmed narrow-is-not-localized exception, verified
+    across all 21 supported languages before choosing it), Arabic, and
+    Traditional Chinese."""
+    result = _run_node_js(_PERIOD_LABEL_JS_HARNESS)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL PERIOD LABEL CHECKS PASSED" in result.stdout
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_card_adopts_document_direction_for_rtl_on_connect() -> None:
+    """FitageCard must copy document.dir onto itself when connected, the
+    same pattern Home Assistant's own frontend components use (verified in
+    the installed home-assistant-frontend bundle) - no hardcoded RTL
+    language list."""
+    harness = r"""
+class FakeElement {
+  attachShadow() { this.shadowRoot = { innerHTML: "", querySelector: () => null, querySelectorAll: () => [] }; return this.shadowRoot; }
+}
+global.HTMLElement = FakeElement;
+global.customElements = { registry: new Map(), get(n){return this.registry.get(n)}, define(n,c){this.registry.set(n,c)} };
+global.window = { customCards: undefined, loadCardHelpers: async () => ({ createCardElement: () => ({}) }) };
+global.document = { createElement: () => ({}), dir: "rtl" };
+const fs = require("fs");
+eval(fs.readFileSync(CARD_PATH, "utf8"));
+const Card = customElements.get("fitage-card");
+const el = new Card();
+el.connectedCallback();
+if (el.dir !== "rtl") { console.error("expected dir 'rtl', got " + JSON.stringify(el.dir)); process.exit(1); }
+console.log("ALL RTL CHECKS PASSED");
+"""
+    result = _run_node_js(harness)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL RTL CHECKS PASSED" in result.stdout
+
+
+def test_value_cell_divider_uses_a_logical_rtl_safe_css_property() -> None:
+    """The divider between adjacent .value cells must use the logical
+    `border-inline-start` (mirrors correctly under RTL) instead of the
+    physical `border-left` it used before - static source check, no
+    Node.js needed."""
+    content = CARD_PATH.read_text(encoding="utf-8")
+    assert ".value+.value{border-inline-start:" in content
+    assert ".value+.value{border-left:" not in content
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
 def test_two_decimal_precision_group() -> None:
     """weight, bone, fat_free_weight, body_fat_mass, body_water_mass and
     protein_mass show at most 2 decimals, with unnecessary trailing zeros
@@ -2039,9 +2785,10 @@ const cases = [
   [0, "0"],
   ["0", "0"],
 ];
+const dutchHass = { locale: { language: "nl", number_format: "language" } };
 const failures = [];
 for (const [value, expected] of cases) {
-  const actual = Card.prototype.format(value, "", "weight");
+  const actual = Card.prototype.format.call({ _hass: dutchHass }, value, "", "weight");
   if (actual !== expected) {
     failures.push(`format(${JSON.stringify(value)}) = ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
   }
@@ -2137,15 +2884,15 @@ async def test_older_integrated_version_is_updated_in_place() -> None:
 
 
 @run_async
-async def test_resource_updates_from_v0_6_2_to_v0_6_3() -> None:
+async def test_resource_updates_from_v0_6_3_to_v0_6_4() -> None:
     """The real-world upgrade this release ships: the previously-registered
-    v0.6.2 Lovelace resource must update in place to v0.6.3, not duplicate."""
+    v0.6.3 Lovelace resource must update in place to v0.6.4, not duplicate."""
     hass, resources = storage_lovelace_data(
         {
             "fitage-id": {
                 "id": "fitage-id",
                 "type": "module",
-                "url": "/fitage/fitage-card.js?v=0.6.2",
+                "url": "/fitage/fitage-card.js?v=0.6.3",
             }
         }
     )
@@ -2154,7 +2901,7 @@ async def test_resource_updates_from_v0_6_2_to_v0_6_3() -> None:
     items = resources.async_items()
     assert len(items) == 1
     assert items[0]["id"] == "fitage-id"
-    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.3"
+    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.4"
     assert items[0]["url"] == MODULE_URL
 
 
