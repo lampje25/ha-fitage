@@ -33,6 +33,20 @@ Depending on the data returned for your profile and scale, the integration provi
 
 The report-control sensors reproduce the verified normal FITAGE calculation route (`mea_category = 0`). They are unavailable for unsupported measurement categories rather than using an unverified calculation.
 
+## What's new in v1.6.1
+
+### Multilingual dashboard card texts
+
+The FITAGE Dashboard Card (`v0.6.4`) now shows its own fixed texts - metric titles, the "current value" label, minimum/maximum, the graph loading placeholder, and the editor's "None" button - in the user's own Home Assistant language, using verified official FITAGE app translations and official Home Assistant frontend translations. All 21 previously supported FITAGE languages are covered for the 14 metric titles; any other language, or any text without a reliable official translation, safely falls back to English. Six Dutch metric names that are already clearer than the literal official app text (for example "Eiwit" instead of "Eiwitgehalte") are deliberately kept as-is. The official Thai app text for the "current value" label is a false friend (it literally means "water current"/"tide"); Thai therefore uses the English "Current" label for that one text instead of a misleading or invented translation.
+
+### Locale-aware numbers and period labels
+
+Numbers shown on the card now follow Home Assistant's own locale and number-format preference (comma or period decimals, space or comma thousands separators) instead of a hardcoded Dutch format. The period selector's visible labels ("7 days", "1 month", etc.) are also localized, without changing the underlying date ranges used to fetch and group the graph data.
+
+### Minimal right-to-left support
+
+The card now adopts Home Assistant's own text direction for right-to-left languages such as Arabic, using the same approach Home Assistant's own frontend uses, with no separate RTL language list to maintain.
+
 ## What's new in v1.6.0
 
 ### Official FITAGE colors, labels, and languages
