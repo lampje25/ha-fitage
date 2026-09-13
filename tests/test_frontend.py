@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.fitage import async_setup
+from custom_components.fitage.assessment import ASSESSMENT_LABELS
 from custom_components.fitage.frontend import (
     CARD_FILENAME,
     CARD_VERSION,
@@ -29,6 +30,47 @@ CARD_PATH = (
 )
 
 _JS_VERSION_RE = re.compile(r"""const\s+VERSION\s*=\s*["']([^"']+)["']""")
+
+# The 21 FITAGE languages proven complete (17/17 assessment keys) during the
+# APK research and approved for implementation; da/sv/fi/no (missing
+# "insufficient") and el/is (near-empty stub files) are deliberately not
+# included yet. Keys other than "en"/"nl" are FITAGE's own file codes, not
+# ISO ones: "jp" (ja), "rus" (ru), "csy" (cs), "fa" (FITAGE's code for
+# French, not Persian - see normalizeLanguage()'s HA "fa" -> English block).
+FITAGE_SUPPORTED_LANGUAGES = [
+    "en", "nl", "de", "es", "it", "ar", "pt", "tr", "hu", "pl", "ro", "sk",
+    "th", "vi", "ko", "jp", "rus", "csy", "zh_CN", "zh_TW", "fa",
+]
+
+# The exact official text bundled in fitage-card.js's LEVEL_LABELS, sourced
+# verbatim from the official FITAGE app's own translation files (research
+# scratchpad), for every assessment key custom_components/fitage/assessment.py
+# can actually produce (ASSESSMENT_LABELS) across all FITAGE_SUPPORTED_LANGUAGES.
+# Spelling, casing, accents and script are preserved exactly as researched,
+# including apparent source quirks (e.g. Italian/Vietnamese stray
+# leading/trailing spaces) - nothing here is invented or machine-translated.
+# The English "above_average"/"below_average"/"excellent" values are the
+# official app's effective, override-merged text (proven from its own
+# appSpecialTranslation data), not the raw, unmerged translation/en.json text.
+EXPECTED_LEVEL_LABELS = {
+    "above_average": {"en": "Above average", "nl": "Bovengemiddeld", "de": "Überdurchschnittlich", "es": "Por encima del promedio", "it": "Sopra la media", "ar": "فوق المتوسط", "pt": "Acima da média", "tr": "Ortalamanın üstü", "hu": "Átlagon felüli", "pl": "Powyżej przeciętnej", "ro": "Peste medie", "sk": "Nad priemerom", "th": "เกินค่าเฉลี่ย", "vi": " Trên mức trung bình", "ko": "평균 이상", "jp": "平均以上", "rus": "Свыше нормы", "csy": "Nad průměrem", "zh_CN": "高于平均值", "zh_TW": "高於平均值", "fa": "Au-dessus de la moyenne"},
+    "acceptable": {"en": "Acceptable", "nl": "Aanvaardbaar", "de": "Annehmbar", "es": "Aceptable", "it": "Accettabile ", "ar": "مقبول", "pt": "Aceitável", "tr": "Normal", "hu": "Elfogadható", "pl": "Akceptowalny", "ro": "Acceptabil", "sk": "Prijateľný", "th": "ยอมรับได้", "vi": " Chấp nhận được", "ko": "허용", "jp": "許容できる", "rus": "Приемлемо", "csy": "Přijatelný", "zh_CN": "可接受的", "zh_TW": "可接受的", "fa": "Acceptable"},
+    "athletes": {"en": "Athletes", "nl": "Atleten", "de": "Sportler", "es": "Atletas", "it": "Atleta", "ar": "الرياضيين", "pt": "Atletas", "tr": "Atletik", "hu": "Sportolók", "pl": "Sportowcy", "ro": "Sportivi", "sk": "Atletický", "th": "นักกีฬา", "vi": " Vận động viên", "ko": "건장한", "jp": "壮健", "rus": "Спортсмены", "csy": "Atletický", "zh_CN": "健壮", "zh_TW": "健壯", "fa": "Vigoureux"},
+    "average": {"en": "Average", "nl": "Gemiddeld", "de": "Durchschnittlich", "es": "Medio", "it": "Nella media", "ar": "معدل", "pt": "Média", "tr": "Ortalama", "hu": "Átlagos", "pl": "Przeciętna", "ro": "In medie", "sk": "Priemerný", "th": "ปานกลาง", "vi": " Trung bình", "ko": "평균", "jp": "平均", "rus": "Норма", "csy": "Průměrný", "zh_CN": "平均水平", "zh_TW": "平均水平", "fa": "Moyenne"},
+    "below_average": {"en": "Below average", "nl": "Ondergemiddeld", "de": "Unterdurchschnittlich", "es": "Debajo del promedio", "it": "Sotto la media ", "ar": "أقل من المتوسط", "pt": "Abaixo da média", "tr": "Ortalamanın altında", "hu": "Átlag alatti", "pl": "Poniżej przeciętnej", "ro": "Sub medie", "sk": "Pod priemerom", "th": "ต่ำกว่ามาตรฐาน", "vi": "Dưới trung bình", "ko": "평균 이하", "jp": "平均以下の", "rus": "Ниже нормы", "csy": "Pod průměrem", "zh_CN": "低于平均值", "zh_TW": "低於平均值", "fa": "Sous la moyenne"},
+    "essential_fat": {"en": "Essential Fat", "nl": "Essentieel Vet", "de": "Essentielles Fett", "es": "Grass esencial", "it": "Grasso essenziale ", "ar": "الدهون الأساسية", "pt": "Gordura essencial", "tr": "Temel Yağ", "hu": "Alapvető zsír", "pl": "Tkanka tłuszczowa podstawowa", "ro": "Grăsime esențială", "sk": "Základné tuk", "th": "ไขมันที่จำเป็น", "vi": " Chất béo thiết yếu", "ko": "마른편", "jp": "薄い", "rus": "Основной жир", "csy": "Základní tuk", "zh_CN": "偏瘦", "zh_TW": "偏瘦", "fa": "Plus maigre"},
+    "excellent": {"en": "Excellent", "nl": "Uitstekend", "de": "Ausgezeichnet", "es": "Suficiente", "it": "Adeguato", "ar": "كافي", "pt": "O bastante", "tr": "Yeterli", "hu": "Megfelelő", "pl": "Doskonałe", "ro": "Destul", "sk": "Dostačujúce", "th": "เพียงพอ", "vi": " Đủ", "ko": "충족", "jp": "十分な", "rus": "Приемлемо", "csy": "Dostačující", "zh_CN": "充足", "zh_TW": "充足", "fa": "Suffisant"},
+    "excessive": {"en": "Excessive", "nl": "Erg hoog", "de": "Sehr hoch", "es": "Excesivo", "it": "Eccessivo", "ar": "بشكل مفرط", "pt": "Excessivo", "tr": "Çok yüksek", "hu": "Túlzott", "pl": "Nadmierna", "ro": "Excesivă", "sk": "Prebytočné", "th": "ซึ่งมากเกินไป", "vi": " Rất cao", "ko": "과도", "jp": "高すぎ", "rus": "Чрезмерное содержание жира ", "csy": "Nadměrné", "zh_CN": "严重偏高", "zh_TW": "嚴重偏高", "fa": "Trop."},
+    "fitness": {"en": "Fitness", "nl": "Fitness", "de": "Fitness", "es": "Sano", "it": "Fitness", "ar": "اللياقه البدنيه", "pt": "Ginástica", "tr": "Fit", "hu": "Fitness", "pl": "Fitness", "ro": "Fitness", "sk": "Fit", "th": "ความแข็งแรง", "vi": " Sự thích hợp", "ko": "건강", "jp": "健康", "rus": "В хорошей форме", "csy": "Fit", "zh_CN": "健康", "zh_TW": "健康", "fa": "Fort"},
+    "good": {"en": "Good", "nl": "Goed", "de": "Gut", "es": "Bien", "it": "Bene", "ar": "جيد", "pt": "Bom", "tr": "İyi", "hu": "Jó", "pl": "Dobry", "ro": "Bun", "sk": "Dobre", "th": "ดี", "vi": "Tốt", "ko": "좋은", "jp": "良い", "rus": "Хороший", "csy": "Dobrý", "zh_CN": "很好", "zh_TW": "很好", "fa": "Bien"},
+    "high": {"en": "High", "nl": "Hoog", "de": "Hoch", "es": "Alto", "it": "Alto", "ar": "مرتفع", "pt": "Alto", "tr": "Yüksek", "hu": "Magas", "pl": "Wysoki", "ro": "Ridicat", "sk": "Vysoký", "th": "สูง", "vi": "Cao", "ko": "표준이상", "jp": "高い", "rus": "Высокий", "csy": "Vysoký", "zh_CN": "偏高", "zh_TW": "偏高", "fa": "Haute"},
+    "insufficient": {"en": "Inadequate", "nl": "Ontoereikend", "de": "Unzureichend", "es": "inadecuado", "it": "Inadeguato", "ar": "غير كافي", "pt": "Inadequado", "tr": "Yetersiz", "hu": "Nem megfelelő", "pl": "Niewystarczający", "ro": "Inadecvat", "sk": "Nedostatok", "th": "ไม่เพียงพอ", "vi": "Không đủ", "ko": "부적절한", "jp": "不十分", "rus": "Недопустимо", "csy": "Nedostatek", "zh_CN": "不足", "zh_TW": "不足", "fa": "Insuffisant"},
+    "low": {"en": "Low", "nl": "Laag", "de": "Niedrig", "es": "Bajo", "it": "Basso", "ar": "منخفض", "pt": "Baixo", "tr": "Düşük", "hu": "Alacsony", "pl": "Niski", "ro": "Scăzut", "sk": "Nízky", "th": "ต่ำ", "vi": "Thấp", "ko": "표준이하", "jp": "低い", "rus": "Низкий", "csy": "Nízký", "zh_CN": "偏低", "zh_TW": "偏低", "fa": "Faible"},
+    "normal": {"en": "Normal", "nl": "Normaal", "de": "Normal", "es": "Normal", "it": "Normale", "ar": "عادي", "pt": "Normal", "tr": "Normal", "hu": "Normál", "pl": "Prawidłowa waga", "ro": "Normal", "sk": "Štandardné", "th": "มาตรฐาน", "vi": " Bình thường", "ko": "정상체중", "jp": "正常", "rus": "Нормальный вес", "csy": "Normální", "zh_CN": "正常", "zh_TW": "正常", "fa": "Ordinaire"},
+    "obesity": {"en": "Obesity", "nl": "Obese", "de": "Adipositas", "es": "Obesidad", "it": "Obesità ", "ar": "بدانة", "pt": "Obesidade", "tr": "Obezite", "hu": "Elhízottság", "pl": "Otyłość", "ro": "Obezitatea", "sk": "Obezita", "th": "โรคอ้วน", "vi": " Béo phì", "ko": "비만", "jp": "肥満", "rus": "Ожирение", "csy": "Obezita", "zh_CN": "肥胖", "zh_TW": "肥胖", "fa": "Obésité"},
+    "overweight": {"en": "Overweight", "nl": "Overgewicht", "de": "Übergewicht", "es": "Sobrepeso", "it": "Sovrappeso", "ar": "زيادة الوزن", "pt": "Excesso de peso", "tr": "Yüksek", "hu": "Túlsúly", "pl": "Nadwaga", "ro": "Supraponderal", "sk": "Nadváha", "th": "น้ำหนักเกิน", "vi": " Thừa cân", "ko": "과체중", "jp": "太りすぎ", "rus": "Избыточная масса тела", "csy": "Nadváha", "zh_CN": "超重", "zh_TW": "超重", "fa": "Surpoids"},
+    "underweight": {"en": "Underweight", "nl": "Ondergewicht", "de": "Untergewicht", "es": "Bajo de peso", "it": "Sottopeso", "ar": "نقص الوزن", "pt": "Abaixo do peso", "tr": "Zayıf", "hu": "Alsúlyú", "pl": "Niedowaga", "ro": "Subponderalitate", "sk": "Podváha", "th": "น้ำหนักต่ำกว่าเกณฑ์", "vi": " Thiếu cân", "ko": "측정량 부족", "jp": "アンダーウェイト", "rus": "Дефицит массы тела", "csy": "Podváha", "zh_CN": "重量不足", "zh_TW": "重量不足", "fa": "Poids insuffisant"},
+}
 
 
 def _find_node() -> str | None:
@@ -205,6 +247,141 @@ function makeEl(slug, states, statsById) {
 
   console.log("ALL FIND-PREFIX CHECKS PASSED");
 })().catch((e) => { console.error(e.stack || e); process.exit(1); });
+"""
+)
+
+_ASSESSMENT_JS_HARNESS = (
+    _LOAD_CARD_JS_PRELUDE
+    + r"""
+const WEIGHT_METRIC = { key: "weight", title: "Gewicht", entity: "weight", unit: "kg" };
+
+function stateWithAssessment(assessment) {
+  const attributes = { normal_min: 60, normal_max: 90, unit_of_measurement: "kg" };
+  if (assessment !== undefined) attributes.assessment = assessment;
+  return { state: "80", attributes };
+}
+
+function makeMetricCard(hass, config) {
+  const el = Object.create(Card.prototype);
+  el.config = { title: "FITAGE", display: "graphs", ...(config || {}) };
+  el.slug = "test_profiel";
+  el._hass = hass;
+  return el;
+}
+
+function renderCurrentCell(assessment, hass, config) {
+  const el = makeMetricCard(
+    hass || { states: { "sensor.test_profiel_weight": stateWithAssessment(assessment) }, language: "nl" },
+    config
+  );
+  return el.metricHtml(WEIGHT_METRIC);
+}
+
+const failures = [];
+function check(label, condition) {
+  if (!condition) failures.push(label);
+}
+
+// 1) Official color mapping, verified through the real bundled metricHtml(),
+// not by re-reading the LEVEL_COLORS object directly - this proves the
+// lookup is actually wired into the rendered "Actueel" value.
+const COLOR_CASES = [
+  ["normal", "#46C083"],
+  ["average", "#46C083"],
+  ["low", "#3A9BE6"],
+  ["below_average", "#3A9BE6"],
+  ["high", "#E3B026"],
+  ["above_average", "#E3B026"],
+  ["excellent", "#7FC534"], // must be light green, never amber
+  ["fitness", "#7FC534"],
+  ["acceptable", "#60BD36"],
+  ["obesity", "#DE7A38"], // dark orange
+  ["excessive", "#DE7A38"], // dark orange
+];
+for (const [assessment, hex] of COLOR_CASES) {
+  const html = renderCurrentCell(assessment);
+  check(
+    `color for "${assessment}" must be ${hex}`,
+    html.includes(`id="current-weight" class="current" style="color:${hex}"`)
+  );
+}
+
+// 2) Dutch labels (hass.language: "nl").
+const NL_LABEL_CASES = [
+  ["normal", "Normaal"],
+  ["below_average", "Ondergemiddeld"],
+  ["above_average", "Bovengemiddeld"],
+  ["essential_fat", "Essentieel Vet"],
+];
+for (const [assessment, text] of NL_LABEL_CASES) {
+  const html = renderCurrentCell(assessment);
+  check(`Dutch label for "${assessment}" must show "${text}"`, html.includes(`>${text}<`));
+}
+
+// 3) English fallback labels (hass.language: "en"), including the official,
+// effective (override-merged) "excellent" -> "Excellent" text - not the raw,
+// unmerged translation/en.json text ("Adequate"), which the real app never
+// actually shows, proven via its own appSpecialTranslation data.
+const EN_LABEL_CASES = [
+  ["normal", "Normal"],
+  ["excellent", "Excellent"],
+  ["below_average", "Below average"],
+];
+for (const [assessment, text] of EN_LABEL_CASES) {
+  const html = renderCurrentCell(assessment, {
+    states: { "sensor.test_profiel_weight": stateWithAssessment(assessment) },
+    language: "en",
+  });
+  check(`English label for "${assessment}" must show "${text}"`, html.includes(`>${text}<`));
+}
+
+// 4) Missing assessment attribute: exact current orange fallback, no label.
+{
+  const html = renderCurrentCell(undefined);
+  check(
+    "missing assessment must not set an inline current color",
+    !/id="current-weight" class="current" style=/.test(html)
+  );
+  check(
+    "missing assessment must render the assessment element hidden and empty",
+    html.includes('id="assessment-weight" class="assessment" hidden></small>')
+  );
+}
+
+// 5) Unknown assessment key: same exact fallback, never a fabricated label.
+{
+  const html = renderCurrentCell("een_onbekende_sleutel");
+  check(
+    "unknown assessment must not set an inline current color",
+    !/id="current-weight" class="current" style=/.test(html)
+  );
+  check(
+    "unknown assessment must render the assessment element hidden and empty",
+    html.includes('id="assessment-weight" class="assessment" hidden></small>')
+  );
+}
+
+// 6) An explicit, valid manual current_color always wins over the official
+// per-category color, even when the assessment is a known, colored key.
+{
+  const config = { custom_colors: true, current_color: "#123456" };
+  const html = renderCurrentCell("normal", undefined, config);
+  check(
+    "a manual current_color must suppress the inline official color",
+    !/id="current-weight" class="current" style=/.test(html)
+  );
+  const el = makeMetricCard({ states: {}, language: "nl" }, config);
+  check(
+    "the manual current_color must still reach --fitage-current-color",
+    el.appearance().includes("--fitage-current-color:#123456;")
+  );
+}
+
+if (failures.length) {
+  console.error(failures.join("\n"));
+  process.exit(1);
+}
+console.log("ALL ASSESSMENT CHECKS PASSED");
 """
 )
 
@@ -881,8 +1058,8 @@ def test_bundled_card_ships_in_the_expected_distribution_location() -> None:
     assert CARD_PATH.is_file()
 
 
-def test_bundled_card_is_version_0_5_1() -> None:
-    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.5.1";')
+def test_bundled_card_is_version_0_6_2() -> None:
+    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.2";')
 
 
 def test_card_version_constant_matches_the_javascript_version() -> None:
@@ -920,7 +1097,7 @@ def test_static_url_path_matches_the_bundled_card() -> None:
 
 
 def test_module_url_is_exactly_the_expected_value() -> None:
-    assert MODULE_URL == "/fitage/fitage-card.js?v=0.5.1"
+    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.2"
 
 
 def test_default_stub_profile_shows_a_neutral_instruction_in_source() -> None:
@@ -982,6 +1159,355 @@ def test_find_prefix_selects_the_real_weight_metric_deterministically() -> None:
     result = _run_node_js(_FIND_PREFIX_JS_HARNESS)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ALL FIND-PREFIX CHECKS PASSED" in result.stdout
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_assessment_color_and_label_mapping_matches_the_official_research() -> None:
+    """metricHtml() must color "Actueel" and show its category label using the
+    official FITAGE per-category colors and text reverse-engineered from the
+    real app (never a zone index, a gradient, or normal_min/normal_max), fall
+    back to today's exact orange with no label when the assessment is missing
+    or unknown, and still let an explicit, valid manual current_color win."""
+    result = _run_node_js(_ASSESSMENT_JS_HARNESS)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL ASSESSMENT CHECKS PASSED" in result.stdout
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_assessment_label_language_follows_home_assistant_language() -> None:
+    """Drives the real, bundled normalizeLanguage()/cardLanguage()/
+    levelLabelText() through metricHtml() for every case the FITAGE language
+    normalization proposal specifies: direct base languages, regional
+    variants, the fr/ja/ru/cs aliases (plain and with a region suffix), the
+    French fa file (never Persian - HA's "fa" itself must be blocked to
+    English), simplified/traditional Chinese (including the extended
+    zh-Hans-CN/zh-Hant-TW forms), pt-BR falling back to the (Portugal) pt
+    file, a wholly unknown language, and a known key ("hight") with no
+    translation in an otherwise fully supported language falling back to
+    English - never staying untranslated, fabricated or raising."""
+    harness = (
+        _LOAD_CARD_JS_PRELUDE
+        + r"""
+const WEIGHT_METRIC = { key: "weight", title: "Gewicht", entity: "weight", unit: "kg" };
+function stateWithAssessment(assessment) {
+  return { state: "80", attributes: { normal_min: 60, normal_max: 90, unit_of_measurement: "kg", assessment } };
+}
+function renderFor(language, assessment) {
+  const el = Object.create(Card.prototype);
+  el.config = { title: "FITAGE", display: "graphs" };
+  el.slug = "test_profiel";
+  el._hass = { states: { "sensor.test_profiel_weight": stateWithAssessment(assessment) }, language };
+  return el.metricHtml(WEIGHT_METRIC);
+}
+const cases = [
+  // Dutch and English, unchanged from before this card supported more.
+  ["nl", "normal", "Normaal"],
+  ["nl-NL", "normal", "Normaal"],
+  ["en", "normal", "Normal"],
+  // Direct base languages - "essential_fat" is used for the five (de, es,
+  // pt, ro, tr) whose own "normal" text happens to equal the English word,
+  // so a real per-language lookup is distinguishable from an accidental
+  // English fallback; the rest use "normal" directly.
+  ["de", "essential_fat", "Essentielles Fett"],
+  ["es", "essential_fat", "Grass esencial"],
+  ["pt", "essential_fat", "Gordura essencial"],
+  ["ro", "essential_fat", "Grăsime esențială"],
+  ["tr", "essential_fat", "Temel Yağ"],
+  ["it", "normal", "Normale"],
+  ["ar", "normal", "عادي"],
+  ["hu", "normal", "Normál"],
+  ["pl", "normal", "Prawidłowa waga"],
+  ["sk", "normal", "Štandardné"],
+  ["th", "normal", "มาตรฐาน"],
+  ["vi", "normal", " Bình thường"],
+  ["ko", "normal", "정상체중"],
+  // Regional variant of a direct base language.
+  ["de-AT", "essential_fat", "Essentielles Fett"],
+  // FITAGE aliases (fr->fa is covered separately below), plain and with a
+  // region suffix stripped first.
+  ["ja", "normal", "正常"],
+  ["ja-JP", "normal", "正常"],
+  ["ru", "normal", "Нормальный вес"],
+  ["ru-RU", "normal", "Нормальный вес"],
+  ["cs", "normal", "Normální"],
+  ["cs-CZ", "normal", "Normální"],
+  // fr/fr-FR/fr-CA must select the French FITAGE file (code "fa"), proven
+  // by "Ordinaire" - "normal" translated into French, not English/Dutch.
+  ["fr", "normal", "Ordinaire"],
+  ["fr-FR", "normal", "Ordinaire"],
+  ["fr-CA", "normal", "Ordinaire"],
+  // HA's "fa" (Persian) and its regional forms must never select the
+  // French "fa" file - they must fall back to English.
+  ["fa", "normal", "Normal"],
+  ["fa-IR", "normal", "Normal"],
+  // Simplified/traditional Chinese, including the extended script+region
+  // forms, distinguished via "athletes" (zh_CN/zh_TW differ there).
+  ["zh", "athletes", "健壮"],
+  ["zh-CN", "athletes", "健壮"],
+  ["zh-Hans", "athletes", "健壮"],
+  ["zh-Hans-CN", "athletes", "健壮"],
+  ["zh-TW", "athletes", "健壯"],
+  ["zh-Hant", "athletes", "健壯"],
+  ["zh-Hant-TW", "athletes", "健壯"],
+  // pt-BR has no FITAGE file of its own and must fall back to the
+  // (Portugal) "pt" file, not to English.
+  ["pt-BR", "essential_fat", "Gordura essencial"],
+  // A wholly unknown/unsupported language falls back to English.
+  ["sw", "normal", "Normal"],
+  ["da", "normal", "Normal"], // deliberately not yet implemented (§6)
+  // A known key with no researched translation in an otherwise fully
+  // supported language ("hight" only has nl/en) falls back to English,
+  // never staying blank or showing a fabricated non-English guess.
+  ["fr", "hight", "High"],
+];
+const failures = [];
+for (const [language, assessment, expected] of cases) {
+  const html = renderFor(language, assessment);
+  if (!html.includes(`>${expected}<`)) {
+    failures.push(`language "${language}", key "${assessment}": expected label "${expected}", got: ${html}`);
+  }
+}
+if (failures.length) { console.error(failures.join("\n")); process.exit(1); }
+console.log("ALL LANGUAGE CHECKS PASSED");
+"""
+    )
+    result = _run_node_js(harness)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL LANGUAGE CHECKS PASSED" in result.stdout
+
+
+_DERIVED_MASS_ASSESSMENT_JS_HARNESS = (
+    _LOAD_CARD_JS_PRELUDE
+    + r"""
+// METRICS itself is a top-level `const` inside the eval()'d card source, so
+// (like every other harness in this file) it stays confined to that eval
+// call and is not reachable from here - these mirror its real entries for
+// the keys under test, including entity: null and the "water" metric's own
+// live entity suffix being "hydration" (not "water"), instead of guessing
+// "sensor.<slug>_water", which would silently no-op the lookup.
+const BODY_FAT_MASS_METRIC = { key: "body_fat_mass", title: "Vetmassa", entity: null, unit: "kg" };
+const BODY_WATER_MASS_METRIC = { key: "body_water_mass", title: "Watermassa", entity: null, unit: "kg" };
+const PROTEIN_MASS_METRIC = { key: "protein_mass", title: "Eiwitmassa", entity: null, unit: "kg" };
+const FAT_FREE_WEIGHT_METRIC = { key: "fat_free_weight", title: "Vetvrij gewicht", entity: null, unit: "kg" };
+const SCORE_METRIC = { key: "score", title: "Gezondheidsscore", entity: null, unit: "" };
+const MASS_METRICS_BY_KEY = {
+  body_fat_mass: BODY_FAT_MASS_METRIC,
+  body_water_mass: BODY_WATER_MASS_METRIC,
+  protein_mass: PROTEIN_MASS_METRIC,
+};
+
+function makeMassCard(states) {
+  const el = Object.create(Card.prototype);
+  el.config = { title: "FITAGE", display: "graphs" };
+  el.slug = "test_profiel";
+  el._hass = { states, language: "nl" };
+  el.latest = new Map([
+    ["body_fat_mass", 27.21],
+    ["body_water_mass", 48.3],
+    ["protein_mass", 15.25],
+  ]);
+  return el;
+}
+
+const FULL_STATES = {
+  "sensor.test_profiel_weight": { state: "94.15", attributes: {} },
+  "sensor.test_profiel_bodyfat": {
+    state: "28.9",
+    attributes: { assessment: "overweight", normal_min: 17, normal_max: 25 },
+  },
+  "sensor.test_profiel_hydration": {
+    state: "51.3",
+    attributes: { assessment: "normal", normal_min: 50, normal_max: 65 },
+  },
+  "sensor.test_profiel_protein": {
+    state: "16.2",
+    attributes: { assessment: "normal", normal_min: 16, normal_max: 18 },
+  },
+};
+
+const failures = [];
+function check(label, condition) { if (!condition) failures.push(label); }
+
+// 1) body_fat_mass must inherit "overweight" (and its official color/label)
+// from the "bodyfat" percentage sensor - never recomputed from the kg bounds.
+{
+  const el = makeMassCard(FULL_STATES);
+  const metric = BODY_FAT_MASS_METRIC;
+  const v = el.values(metric);
+  check("body_fat_mass assessment must equal bodyfat's ('overweight')", v.assessment === "overweight");
+  check("body_fat_mass normal_min/max stay derived from bodyfat's own range", v.min === 94.15 * 17 / 100 && v.max === 94.15 * 25 / 100);
+  const html = el.metricHtml(metric);
+  check("body_fat_mass current cell must use overweight's official color #E3B026", html.includes('id="current-body_fat_mass" class="current" style="color:#E3B026"'));
+  check("body_fat_mass must show the Dutch 'Overgewicht' label", html.includes(">Overgewicht<"));
+}
+
+// 2) body_water_mass must inherit "normal" from "water" (entity id "hydration").
+{
+  const el = makeMassCard(FULL_STATES);
+  const metric = BODY_WATER_MASS_METRIC;
+  const v = el.values(metric);
+  check("body_water_mass assessment must equal water's ('normal')", v.assessment === "normal");
+  const html = el.metricHtml(metric);
+  check("body_water_mass current cell must use normal's official color #46C083", html.includes('id="current-body_water_mass" class="current" style="color:#46C083"'));
+  check("body_water_mass must show the Dutch 'Normaal' label", html.includes(">Normaal<"));
+}
+
+// 3) protein_mass must inherit "normal" from "protein".
+{
+  const el = makeMassCard(FULL_STATES);
+  const metric = PROTEIN_MASS_METRIC;
+  const v = el.values(metric);
+  check("protein_mass assessment must equal protein's ('normal')", v.assessment === "normal");
+  const html = el.metricHtml(metric);
+  check("protein_mass current cell must use normal's official color #46C083", html.includes('id="current-protein_mass" class="current" style="color:#46C083"'));
+  check("protein_mass must show the Dutch 'Normaal' label", html.includes(">Normaal<"));
+}
+
+// 4) A missing percentage source (e.g. not yet loaded, or gender unknown so
+// assessment.py omitted it) must not error and must keep today's exact
+// fallback: no inline color, no label - never a fabricated assessment.
+{
+  const statesWithoutSources = { "sensor.test_profiel_weight": FULL_STATES["sensor.test_profiel_weight"] };
+  const el = makeMassCard(statesWithoutSources);
+  for (const key of ["body_fat_mass", "body_water_mass", "protein_mass"]) {
+    const metric = MASS_METRICS_BY_KEY[key];
+    const v = el.values(metric);
+    check(`${key} assessment must be undefined when its percentage source is missing`, v.assessment === undefined);
+    const html = el.metricHtml(metric);
+    check(`${key} must not set an inline current color when its source is missing`, !new RegExp(`id="current-${key}" class="current" style=`).test(html));
+    check(`${key} must render its assessment element hidden and empty when its source is missing`, html.includes(`id="assessment-${key}" class="assessment" hidden></small>`));
+  }
+}
+
+// 5) Fat-free weight and the health score have no percentage source mapping
+// and must never pick up an assessment, even with a fully populated hass.
+{
+  const el = makeMassCard(FULL_STATES);
+  for (const metric of [FAT_FREE_WEIGHT_METRIC, SCORE_METRIC]) {
+    const v = el.values(metric);
+    check(`${metric.key} must keep no assessment (untouched fallback behavior)`, v.assessment === undefined);
+  }
+}
+
+if (failures.length) {
+  console.error(failures.join("\n"));
+  process.exit(1);
+}
+console.log("ALL DERIVED MASS ASSESSMENT CHECKS PASSED");
+"""
+)
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_derived_mass_metrics_inherit_assessment_from_percentage_sensor() -> None:
+    """body_fat_mass, body_water_mass and protein_mass have no live HA entity
+    of their own in METRICS (entity: null), so values() must copy `assessment`
+    from the corresponding percentage sensor (bodyfat/water/protein) - the
+    reliable official category source - exactly like it already does for
+    normal_min/normal_max, instead of leaving it undefined or recomputing a
+    category from the kg bounds. A missing source must keep the existing
+    orange/no-label fallback, and fat_free_weight/score must stay untouched."""
+    result = _run_node_js(_DERIVED_MASS_ASSESSMENT_JS_HARNESS)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL DERIVED MASS ASSESSMENT CHECKS PASSED" in result.stdout
+
+
+def test_level_colors_and_labels_cover_every_current_assessment_key() -> None:
+    """Every assessment key custom_components/fitage/assessment.py can
+    actually produce today (ASSESSMENT_LABELS) must have both an official
+    color and an official label in the bundled card, so nothing the backend
+    can send is ever silently left with no color or no text. Runs without
+    Node.js - a plain, static cross-check of the two source files."""
+    content = CARD_PATH.read_text(encoding="utf-8")
+    colors_block = re.search(r"const LEVEL_COLORS = \{(.*?)\n\};", content, re.S)
+    labels_block = re.search(r"const LEVEL_LABELS = \{(.*?)\n\};", content, re.S)
+    assert colors_block is not None
+    assert labels_block is not None
+    for key in ASSESSMENT_LABELS:
+        assert re.search(rf"(?<!\w){re.escape(key)}:", colors_block.group(1)), (
+            f"assessment key {key!r} (used by assessment.py) has no color in "
+            "fitage-card.js's LEVEL_COLORS"
+        )
+        assert re.search(rf"(?<!\w){re.escape(key)}:", labels_block.group(1)), (
+            f"assessment key {key!r} (used by assessment.py) has no label in "
+            "fitage-card.js's LEVEL_LABELS"
+        )
+    # "hight" is a typo that exists in the official FITAGE app itself, not
+    # producible by assessment.py today; it must still be preserved verbatim
+    # for whenever assessment.py starts using it, per the color research.
+    assert re.search(r"(?<!\w)hight:", colors_block.group(1))
+    assert re.search(r"(?<!\w)hight:", labels_block.group(1))
+
+
+def test_expected_level_labels_cover_exactly_every_current_assessment_key() -> None:
+    """EXPECTED_LEVEL_LABELS (this test file's own record of the officially
+    researched text) must claim exactly the assessment keys assessment.py can
+    actually produce today - no more, no less - so a future change to either
+    side is caught here rather than silently drifting apart. "hight" is
+    deliberately excluded: it is not part of ASSESSMENT_LABELS."""
+    assert set(EXPECTED_LEVEL_LABELS) == set(ASSESSMENT_LABELS)
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_all_supported_languages_have_the_exact_official_label_text() -> None:
+    """Every one of FITAGE_SUPPORTED_LANGUAGES must have the exact, official
+    text (EXPECTED_LEVEL_LABELS) for every assessment key assessment.py can
+    produce, read back from the real, bundled LEVEL_LABELS object (not by
+    re-typing it a second time) - and none of the deliberately not-yet-
+    implemented FITAGE codes (da, sv, fi, no, el, is) may appear anywhere in
+    it, guarding against implementing them ahead of the approved research."""
+    # LEVEL_LABELS is a top-level `const` inside the card source: a direct
+    # eval() of `src` alone (as _LOAD_CARD_JS_PRELUDE does) confines it to
+    # that eval call, unreachable afterward - only `function` declarations
+    # leak into the surrounding scope that way (see METRICS's comment
+    # elsewhere in this file for the same constraint). The dump statement is
+    # therefore appended to `src` itself and evaluated together in one call,
+    # sharing its lexical scope, instead of reusing _LOAD_CARD_JS_PRELUDE.
+    harness = r"""
+class FakeElement {
+  attachShadow() { this.shadowRoot = { innerHTML: "", querySelector: () => null, querySelectorAll: () => [] }; return this.shadowRoot; }
+}
+global.HTMLElement = FakeElement;
+global.customElements = { registry: new Map(), get(n){return this.registry.get(n)}, define(n,c){this.registry.set(n,c)} };
+global.window = { customCards: undefined, loadCardHelpers: async () => ({ createCardElement: () => ({}) }) };
+global.document = { createElement: () => ({}) };
+
+const fs = require("fs");
+const src = fs.readFileSync(CARD_PATH, "utf8");
+eval(src + `
+console.log("===LEVEL_LABELS_JSON_START===");
+console.log(JSON.stringify(LEVEL_LABELS));
+console.log("===LEVEL_LABELS_JSON_END===");
+`);
+"""
+    result = _run_node_js(harness)
+    assert result.returncode == 0, result.stdout + result.stderr
+    match = re.search(
+        r"===LEVEL_LABELS_JSON_START===\n(.*)\n===LEVEL_LABELS_JSON_END===",
+        result.stdout,
+        re.S,
+    )
+    assert match is not None, result.stdout + result.stderr
+    actual = json.loads(match.group(1))
+
+    not_yet_implemented = {"da", "sv", "fi", "no", "el", "is"}
+    failures: list[str] = []
+    for key, expected_by_lang in EXPECTED_LEVEL_LABELS.items():
+        actual_by_lang = actual.get(key, {})
+        for lang in not_yet_implemented:
+            if lang in actual_by_lang:
+                failures.append(
+                    f"{key!r} must not yet have a {lang!r} entry (not "
+                    "implemented per the approved research)"
+                )
+        for lang in FITAGE_SUPPORTED_LANGUAGES:
+            actual_text = actual_by_lang.get(lang)
+            expected_text = expected_by_lang[lang]
+            if actual_text != expected_text:
+                failures.append(
+                    f"{key!r}[{lang!r}]: expected {expected_text!r}, got {actual_text!r}"
+                )
+    assert not failures, "\n".join(failures)
 
 
 @pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
@@ -1164,15 +1690,15 @@ async def test_older_integrated_version_is_updated_in_place() -> None:
 
 
 @run_async
-async def test_resource_updates_from_v0_5_0_to_v0_5_1() -> None:
+async def test_resource_updates_from_v0_6_1_to_v0_6_2() -> None:
     """The real-world upgrade this release ships: the previously-registered
-    v0.5.0 Lovelace resource must update in place to v0.5.1, not duplicate."""
+    v0.6.1 Lovelace resource must update in place to v0.6.2, not duplicate."""
     hass, resources = storage_lovelace_data(
         {
             "fitage-id": {
                 "id": "fitage-id",
                 "type": "module",
-                "url": "/fitage/fitage-card.js?v=0.5.0",
+                "url": "/fitage/fitage-card.js?v=0.6.1",
             }
         }
     )
@@ -1181,7 +1707,7 @@ async def test_resource_updates_from_v0_5_0_to_v0_5_1() -> None:
     items = resources.async_items()
     assert len(items) == 1
     assert items[0]["id"] == "fitage-id"
-    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.5.1"
+    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.2"
     assert items[0]["url"] == MODULE_URL
 
 
