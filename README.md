@@ -33,6 +33,16 @@ Depending on the data returned for your profile and scale, the integration provi
 
 The report-control sensors reproduce the verified normal FITAGE calculation route (`mea_category = 0`). They are unavailable for unsupported measurement categories rather than using an unverified calculation.
 
+## What's new in v1.6.0
+
+### Official FITAGE colors, labels, and languages
+
+The FITAGE Dashboard Card now colors and labels each measurement's assessment using FITAGE's own official category colors and text, reverse-engineered from the official FITAGE app rather than guessed. The card automatically follows Home Assistant's own user language and supports 21 officially verified FITAGE languages, with English as the safe fallback for any other language. If an assessment category is ever unrecognized, the card shows no label and keeps its existing default color instead of guessing.
+
+### Corrected bone mass, bone ratio, and BMR categories
+
+Bone mass and bone ratio now use the official FITAGE thresholds: bone mass bounds scale with the profile's current weight, and bone ratio is judged against fixed official percentages. BMR now reports the official `not_standard`/`standard` categories instead of the previous, incorrect `below_average`/`above_average`. See the [v1.6.0 release notes](docs/release-notes-v1.6.0.md) if you have automations or dashboards that filter on the BMR assessment value.
+
 ## What's new in v1.5.0
 
 ### FITAGE Dashboard Card
@@ -90,6 +100,7 @@ Card capabilities:
 - Adjustable text size.
 - Optional custom colors.
 - The current value and, where available, the minimum and maximum of the normal range.
+- Each assessed measurement's official FITAGE category color and label, automatically shown in Home Assistant's own user language (21 officially verified languages, English fallback otherwise); an unrecognized assessment category shows no label and keeps the default color rather than guessing.
 - Decimal precision tuned per measurement.
 - Automatic profile/statistic linking, with a clear error shown instead of a guess whenever a profile cannot be linked reliably.
 
@@ -98,7 +109,7 @@ If you manage Lovelace resources through YAML instead of the Home Assistant UI, 
 ```yaml
 lovelace:
   resources:
-    - url: /fitage/fitage-card.js?v=0.5.1
+    - url: /fitage/fitage-card.js?v=0.6.3
       type: module
 ```
 
@@ -176,6 +187,8 @@ If Home Assistant detects the rare case where the new identity is already occupi
 ## FITAGE assessments
 
 Assessment categories reconstructed from the official FITAGE app logic appear as attributes on the existing measurement sensors; the integration does not create extra assessment entities. Some limits depend on gender and region. Height-dependent assessments use the historical height stored with that specific measurement, never the current profile height. Assessments are omitted when a required input or a reliably identified supported region is unavailable.
+
+Bone mass is judged against official weight-scaled bounds (for example 3%-5% of the current weight for a male profile), and bone ratio against the equivalent fixed official percentages. BMR reports the official `not_standard` (below the calculated reference) or `standard` (at or above it) category.
 
 ## Installation with HACS
 

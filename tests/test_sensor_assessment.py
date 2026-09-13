@@ -254,6 +254,62 @@ def test_profile_entity_metadata_and_device_are_consistent() -> None:
         }
 
 
+def test_bone_and_bone_ratio_sensors_expose_the_fixed_bone_assessment() -> None:
+    """bone's kg bounds scale with the profile's actual weight (the official
+    example: 80 kg male -> 2.4-4.0 kg), while bone_ratio uses the fixed
+    official percentage bounds (3%-5% male) - both must read through the
+    sensor layer's min/max/assessment attributes intact, using the same
+    precomputed assessments the coordinator already stores per profile."""
+    measurement = {"weight": 80, "gender": 1, "bone": 4.5}
+    profile = _profile(
+        "profile-a", "A", user_values={"area_code": "NL"}, measurement=measurement
+    )
+    coordinator = _coordinator([profile])
+    bone_sensor = FeelfitMeasurementSensor(
+        coordinator, _description("bone", "measurement"), "profile-a"
+    )
+    ratio_sensor = FeelfitMeasurementSensor(
+        coordinator, _description("bone_ratio", "measurement"), "profile-a"
+    )
+
+    assert bone_sensor.native_value == 4.5
+    assert bone_sensor.extra_state_attributes["assessment"] == "above_average"
+    assert bone_sensor.extra_state_attributes["normal_min"] == 2.4
+    assert bone_sensor.extra_state_attributes["normal_max"] == 4.0
+
+    assert ratio_sensor.native_value == 5.6  # _fitage_round(4.5/80*100, 1)
+    assert ratio_sensor.extra_state_attributes["assessment"] == "above_average"
+    assert ratio_sensor.extra_state_attributes["normal_min"] == 3.0
+    assert ratio_sensor.extra_state_attributes["normal_max"] == 5.0
+
+
+def test_bmr_sensor_exposes_the_official_not_standard_and_standard_assessment() -> None:
+    """bmr must report "not_standard"/"standard" (never the old
+    "below_average"/"above_average"), together with the unchanged reference
+    formula's value as reference_bmr, read through the sensor layer intact."""
+    measurement = {
+        "weight": 90,
+        "height": 180,
+        "gender": 1,
+        "birthday": "1990-01-01",
+        "time_stamp": 1_735_689_600,  # 2025-01-01, age 35 -> factor 37.9
+        "bmr": 1900,  # above the ~1827.52 reference
+    }
+    profile = _profile(
+        "profile-a", "A", user_values={"area_code": "NL"}, measurement=measurement
+    )
+    coordinator = _coordinator([profile])
+    sensor = FeelfitMeasurementSensor(
+        coordinator, _description("bmr", "measurement"), "profile-a"
+    )
+
+    assert sensor.native_value == 1900
+    assert sensor.extra_state_attributes["assessment"] == "standard"
+    assert sensor.extra_state_attributes["reference_bmr"] == pytest.approx(
+        1827.52, abs=0.01
+    )
+
+
 def test_sensor_uses_precomputed_assessment_for_its_profile() -> None:
     """Assessment matching uses profile ID and measurement key."""
     measurement = {"weight": 70, "height": 175, "bmi": 25, "gender": 1}
