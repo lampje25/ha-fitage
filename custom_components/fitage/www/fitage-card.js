@@ -1,4 +1,4 @@
-const VERSION = "0.6.3";
+const VERSION = "0.6.4";
 const STUB_PROFILE = "jouw_profiel";
 const METRICS = [
   ["weight", "Gewicht", "weight", "kg"], ["bmi", "BMI", "bmi", ""],
@@ -81,6 +81,66 @@ const LEVEL_LABELS = {
   standard: { en: "Standard", nl: "Standaard", de: "Standard", es: "Cumplida", it: "Soddisfa gli standard", ar: "يلبي المعايير", pt: "Conseguir o padrão", tr: "Standart", hu: "Átlag elérve", pl: "Standardowy", ro: "Corespunde Standardului", sk: "Spĺňa štandard", th: "อยู่ในระดับมาตรฐาน", vi: "Đạt tiêu chuẩn", ko: "표준", jp: "基準を満たす", rus: "Стандартный", csy: "Splňuje standard", zh_CN: "达标", zh_TW: "達標", fa: "Conforme à la norme" },
   underweight: { en: "Underweight", nl: "Ondergewicht", de: "Untergewicht", es: "Bajo de peso", it: "Sottopeso", ar: "نقص الوزن", pt: "Abaixo do peso", tr: "Zayıf", hu: "Alsúlyú", pl: "Niedowaga", ro: "Subponderalitate", sk: "Podváha", th: "น้ำหนักต่ำกว่าเกณฑ์", vi: " Thiếu cân", ko: "측정량 부족", jp: "アンダーウェイト", rus: "Дефицит массы тела", csy: "Podváha", zh_CN: "重量不足", zh_TW: "重量不足", fa: "Poids insuffisant" },
 };
+// Official FITAGE metric titles, keyed by the card's own internal METRICS
+// key (not the FITAGE API field name), for the same 21 officially proven
+// FITAGE languages as LEVEL_LABELS above. Every value is the literal
+// official app text (translation/*.json, keyed as documented per metric in
+// the accompanying research), except six deliberate Dutch exceptions where
+// the official app text is either less clear or, for "protein_mass",
+// outright wrong ("Eiwitmolecuul" = "protein molecule", not a mass) - never
+// "correct" these back to the literal official text:
+//   protein         -> "Eiwit" (not "Eiwitgehalte")
+//   protein_mass    -> "Eiwitmassa" (not the incorrect "Eiwitmolecuul")
+//   bmr             -> "Basaal metabolisme" (not the bare "BMR")
+//   fat_free_weight -> "Vetvrij gewicht" (not "Vetvrij lichaamsgewicht")
+//   body_fat_mass   -> "Vetmassa" (not "Lichaamsvetmassa")
+//   body_water_mass -> "Watermassa" (not "Lichaamswatermassa")
+// All other Dutch values already match the official app text exactly.
+const METRIC_LABELS = {
+  weight: { en: "Weight", nl: "Gewicht", de: "Gewicht", es: "Peso", it: "Peso", ar: "الوزن", pt: "Peso", tr: "Ağırlık", hu: "Súly", pl: "Waga", ro: "Greutate", sk: "Hmotnosť", th: "น้ำหนัก", vi: " Cân nặng", ko: "체중", jp: "体重", rus: "Вес", csy: "Hmotnost", zh_CN: "体重", zh_TW: "體重", fa: "Poids" },
+  bmi: { en: "BMI", nl: "BMI", de: "BMI", es: "IMC", it: "BMI", ar: "مؤشر كتلة الجسم", pt: "BMI", tr: "VKİ", hu: "BMI", pl: "BMI", ro: "IMC", sk: "BMI", th: "ดัชนีมวลกาย", vi: "Chỉ số khối cơ thể", ko: "BMI", jp: "BMI", rus: "Индекс массы тела", csy: "BMI", zh_CN: "BMI", zh_TW: "BMI", fa: "IMC" },
+  bodyfat: { en: "Body fat", nl: "Lichaamsvet", de: "Körperfett", es: "Grasa corporal", it: "Grasso corporeo", ar: "دهون الجسم", pt: "Gordura corporal", tr: "Vücut Yağ Oranı ", hu: "Testzsír", pl: "Tłuszcz ciała", ro: "Grăsime corp.", sk: "Telesný tuk", th: "ไขมัน", vi: "Lượng mỡ cơ thể", ko: "체내 지방율", jp: "体脂肪率", rus: "Содержание жира", csy: "Tělesný tuk", zh_CN: "脂肪率", zh_TW: "脂肪率", fa: "Graisse corporelle" },
+  water: { en: "Body water", nl: "Lichaamswater", de: "Körperwasser", es: "Agua corporal", it: "Idratazione", ar: "مياه الجسم", pt: "Lìquido corporal", tr: "Vücut Suyu", hu: "Test Víz", pl: "Zawartość wody w organiźmie", ro: "Nivel hidratare", sk: "Telesná voda", th: "น้ำในร่างกาย", vi: " Lượng nước cơ thể", ko: "체내 수분", jp: "体水分率", rus: "Содержание воды в организме", csy: "Tělesná voda", zh_CN: "体水份", zh_TW: "體水份", fa: "Eau Corporelle Totale" },
+  muscle: { en: "Muscle Mass Percentage", nl: "Spierverhouding", de: "Muskelanteil", es: "Índice de Masa Muscular", it: "Rapporto muscolare", ar: "معدل العضلات", pt: "Proporção muscular", tr: "Kas oranı", hu: "Izom arány", pl: "Stosunek mięśniowy", ro: "Rata musculară", sk: "Pomer svalov", th: "อัตราส่วนกล้ามเนื้อ", vi: "Tỷ lệ cơ bắp", ko: "근육 비율", jp: "筋肉比率", rus: "Мышечное соотношение", csy: "svalový poměr", zh_CN: "肌肉率", zh_TW: "肌肉率", fa: "Ratio musculaire" },
+  protein: { en: "Protein", nl: "Eiwit", de: "Protein", es: "Proteína", it: "Proteine", ar: "بروتين", pt: "Proteína", tr: "Protein", hu: "Protein", pl: "Białko", ro: "Proteină", sk: "Proteín", th: "โปรตีน", vi: "Protein", ko: "단백질", jp: "タンパク質", rus: "Белки", csy: "Protein", zh_CN: "蛋白质", zh_TW: "蛋白質", fa: "Protéine" },
+  bone: { en: "Bone Mass", nl: "Botmassa", de: "Knochenmasse", es: "Masa ósea", it: "Massa ossea", ar: "كتلة العظام", pt: "Massa óssea", tr: "Kemik Kütlesi", hu: "Csont tömeg", pl: "Masa kości", ro: "Masă osoasă", sk: "Kostná hmota", th: "มวลกระดูก", vi: " Khối lượng xương", ko: "골격(뼈)량", jp: "骨量", rus: "Костная масса", csy: "Kostní hmota", zh_CN: "骨量", zh_TW: "骨量", fa: "Masse osseuse" },
+  subfat: { en: "Subcutaneous fat", nl: "Onderhuids vet", de: "Subkutanes Fett", es: "Índice de grasa subcutánea", it: "Grasso sottocutaneo", ar: "دهون تحت الجلد", pt: "Gordura subcutânea", tr: "Deri Altı Yağ Oranı", hu: "Szubkután zsír", pl: "Tłuszcz podskórny", ro: "Grăsime subcutanată", sk: "Podkožný tuk", th: "ไขมันใต้ผิวหนัง", vi: " Mỡ dưới da", ko: "피하 지방", jp: "皮下脂肪", rus: "Подкожно-жировая клетчатка", csy: "Podkožní tuk", zh_CN: "皮下脂肪率", zh_TW: "皮下脂肪", fa: "Graisse sous-cutanée" },
+  fat_free_weight: { en: "Fat-Free Body Weight", nl: "Vetvrij gewicht", de: "Fettfreie Masse", es: "Peso sin grasa", it: "Peso corporeo senza grassi", ar: "وزن الجسم بدون دهون", pt: "Peso corporal sem gordura", tr: "Yağsız Vücut Ağırlığı", hu: "Zsírmentes testsúly", pl: "Masa ciała bez tłuszczu", ro: "Greutate corporală fără grăsime", sk: "Hmotnosť bez tuku", th: "มวลร่างกายไร้ไขมัน", vi: " Trọng lượng cơ thể không béo", ko: "총지방 제거 체중", jp: "除脂肪体重", rus: "Масса тела без учета жира", csy: "Hmotnost bez tuku", zh_CN: "去脂体重", zh_TW: "去脂體重", fa: "Poids hors masse grasse" },
+  body_fat_mass: { en: "Fat mass", nl: "Vetmassa", de: "Körperfettmasse", es: "Masa grasa corporal", it: "Massa grassa corporea", ar: "كتلة الدهون في الجسم", pt: "Massa gorda corporal", tr: "Vücut Yağ Kitlesi", hu: "Testzsír tömege", pl: "Masa tłuszczu ciała", ro: "Masă grasă corporală", sk: "Hmotnosť telesného tuku", th: "มวลไขมันในร่างกาย", vi: "Khối lượng mỡ trong cơ thể", ko: "체내 지방량", jp: "体脂肪量", rus: "Масса жира в теле", csy: "Tělesná tuková hmota", zh_CN: "体脂肪量", zh_TW: "體脂肪量", fa: "Masse grasse corporelle" },
+  body_water_mass: { en: "Body Water Mass", nl: "Watermassa", de: "Wassermasse im Körper", es: "Masa de agua corporal", it: "Massa d'acqua corporea", ar: "محتوى الماء في الجسم", pt: "Massa de água corporal", tr: "Vücut Su Kütlesi", hu: "Testvíz tömege", pl: "Masa wody w ciele", ro: "Masă de apă în corp", sk: "Hmotnosť vody v tele", th: "มวลน้ำในร่างกาย", vi: "Khối lượng nước trong cơ thể", ko: "체내 수분량", jp: "体水分量", rus: "Масса воды в теле", csy: "Obsah vody v těle", zh_CN: "体水分量", zh_TW: "體水分量", fa: "Masse d'eau corporelle" },
+  protein_mass: { en: "Protein Mass", nl: "Eiwitmassa", de: "Proteinmasse", es: "Masa de proteínas", it: "Massa proteica", ar: "كتلة البروتين", pt: "Massa de proteína", tr: "Protein kütle", hu: "Fehérjemennyiség", pl: "Masa białka", ro: "Masă de proteine", sk: "Hmotnosť bielkovín", th: "มวลโปรตีน", vi: "Khối lượng protein", ko: "단백질 질량", jp: "タンパク質量", rus: "Масса белка", csy: "Hmotnost bílkovin", zh_CN: "蛋白质质量", zh_TW: "蛋白質質量", fa: "Masse protéique" },
+  bmr: { en: "BMR", nl: "Basaal metabolisme", de: "Grundumsatz", es: "TMB", it: "BMR", ar: "معدل الأيض الأساسي", pt: "BMR", tr: "Bazal Metabolizma Hızı", hu: "BMR", pl: "BMR (podstawowa przemiana materii)", ro: "RMB", sk: "BMR", th: "อัตราการเผาผลาญขณะพัก", vi: " BMR", ko: "기초대사량", jp: "基礎代謝量", rus: "Скорость обмена веществ", csy: "BMR", zh_CN: "基础代谢量", zh_TW: "基礎代謝量", fa: "Taux métab. debase" },
+  score: { en: "Health Score", nl: "Gezondheidsscore", de: "Gesundheitspunktzahl", es: "Puntuación de salud", it: "Punteggio di salute", ar: "نقاط الصحة", pt: "Pontuação de saúde", tr: "Sağlık Skoru", hu: "Egészségpontszám", pl: "Wynik zdrowia", ro: "Scor de sănătate", sk: "Skóre zdravia", th: "คะแนนสุขภาพ", vi: "Điểm sức khỏe", ko: "건강 점수", jp: "健康スコア", rus: "Оценка здоровья", csy: "Zdravotní skóre", zh_CN: "健康分数", zh_TW: "健康分數", fa: "Score de santé" },
+};
+// The official label text for a metric, or the card's own original Dutch
+// title as an ultimate safety net if a key were ever missing from
+// METRIC_LABELS entirely (never happens today - every metric has all 21
+// languages plus an English fallback).
+function metricTitle(m, lang) {
+  const entry = METRIC_LABELS[m.key];
+  return (entry && (entry[lang] || entry.en)) || m.title;
+}
+// Official FITAGE text for the "current value" label (translation key
+// "current"), proven present and non-empty in all 21 supported languages,
+// with one deliberate exception: Thai ("th") is intentionally omitted here
+// so it falls through to the English fallback below. The official Thai
+// string for this key is "กระแสน้ำ", which means "water current"/"tide" -
+// not "current value" - and would mislabel every metric's present-day
+// reading (weight, BMI, etc.). Never replace this with an invented or
+// machine-translated Thai string; only the app's own next official release
+// can supply a correct one.
+const CURRENT_LABELS = { en: "Current", nl: "Huidig", de: "Aktuell", es: "Actual", it: "Attuale", ar: "حالي", pt: "Atual", tr: "Güncel", hu: "aktuális", pl: "Aktualnie", ro: "curent", sk: "aktuálny", vi: "Hiện tại", ko: "현재", jp: "現在", rus: "Текущий", csy: "aktuální", zh_CN: "当前", zh_TW: "當前", fa: "En cours" };
+function currentLabel(lang) {
+  return CURRENT_LABELS[lang] || CURRENT_LABELS.en;
+}
+// A generic Home Assistant hass.localize() lookup with a mandatory literal
+// fallback - hass.localize() itself already returns "" (never undefined,
+// never the raw key) for a missing translation, but "" must still never be
+// shown as a label, so every call site supplies its own English fallback.
+function haLocalize(hass, key, fallback) {
+  const text = hass?.localize?.(key);
+  return text || fallback;
+}
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 function isHexColor(value) { return HEX_COLOR_RE.test(value || ""); }
 // Home Assistant -> FITAGE language normalization, per the officially
@@ -128,6 +188,55 @@ function levelLabelText(assessment, lang) {
   const entry = assessment ? LEVEL_LABELS[assessment] : undefined;
   return entry ? entry[lang] || entry.en || null : null;
 }
+// Reproduces Home Assistant's own official hass.locale.number_format
+// resolution (proven from the installed home-assistant-frontend bundle's
+// numberFormatToLocale()), so the card's own number formatting matches
+// HA's, not a fixed "nl-NL" locale. Deliberately independent of
+// normalizeLanguage()/cardLanguage(): those convert a HA language into a
+// FITAGE *file* code for looking up official app text, whereas number
+// formatting must pass real BCP-47 tags straight to Intl.NumberFormat, so
+// hass.locale.language is used here unmodified.
+const NUMBER_FORMAT_LOCALES = {
+  comma_decimal: ["en-US", "en"],
+  decimal_comma: ["de", "es", "it"],
+  space_comma: ["fr", "sv", "cs"],
+  quote_decimal: ["de-CH"],
+};
+function numberFormatToLocale(locale) {
+  switch (locale?.number_format) {
+    case "comma_decimal": return NUMBER_FORMAT_LOCALES.comma_decimal;
+    case "decimal_comma": return NUMBER_FORMAT_LOCALES.decimal_comma;
+    case "space_comma": return NUMBER_FORMAT_LOCALES.space_comma;
+    case "quote_decimal": return NUMBER_FORMAT_LOCALES.quote_decimal;
+    case "system": return undefined;
+    default: return locale?.language;
+  }
+}
+// FITAGE range key -> [amount, Intl unit] for the *displayed* period label
+// only. The range key itself (used for the `days` getter and the
+// statistics-graph period lookup) is never touched by language.
+const RANGE_UNITS = { "7d": [7, "day"], "14d": [14, "day"], "1m": [1, "month"], "3m": [3, "month"], "1j": [1, "year"] };
+// The existing, language-independent English abbreviation, used whenever
+// Intl itself is unavailable or rejects the locale - never the raw range key.
+const RANGE_FALLBACK_LABELS = { "7d": "7d", "14d": "14d", "1m": "1m", "3m": "3m", "1j": "1y" };
+// Intl.NumberFormat's unitDisplay:"narrow" was verified (day/month/year,
+// all 21 supported HA locales) to give a real, compact, correctly
+// localized abbreviation everywhere except Japanese, where it falls back
+// to bare Latin digits+letter ("1m","1y") instead of actual Japanese text;
+// "short" gives genuine Japanese there ("1 か月","1 年"). This is the only
+// language where "narrow" is not actually localized for these units.
+function periodLabel(range, hass) {
+  const unitSpec = RANGE_UNITS[range];
+  if (!unitSpec) return RANGE_FALLBACK_LABELS[range] || range;
+  const [amount, unit] = unitSpec;
+  const rawLanguage = hass?.language || hass?.locale?.language || "en";
+  const unitDisplay = String(rawLanguage).toLowerCase().startsWith("ja") ? "short" : "narrow";
+  try {
+    return new Intl.NumberFormat(rawLanguage, { style: "unit", unit, unitDisplay }).format(amount);
+  } catch (e) {
+    return RANGE_FALLBACK_LABELS[range] || range;
+  }
+}
 // The Home Assistant lovelace card type embedded per metric. "statistics-graph"
 // is one of Home Assistant's LAZY_LOAD_TYPES (create-element/create-element-base.ts):
 // createCardElement() always routes it through _lazyCreate(tag, config), which
@@ -164,6 +273,12 @@ class FitageCard extends HTMLElement {
     super(); this.attachShadow({ mode: "open" }); this.range = "1m";
     this.graphs = new Map(); this.latest = new Map(); this.graphGeneration = 0;
   }
+  // Home Assistant's own frontend components consistently copy
+  // document.dir onto themselves this same way when they connect (verified
+  // in the installed home-assistant-frontend bundle) - text direction then
+  // inherits correctly through the shadow root via the standard CSS
+  // `direction` property, without a hardcoded RTL-language list here.
+  connectedCallback() { this.dir = document.dir; }
   static getConfigElement() { return document.createElement("fitage-card-editor"); }
   static getStubConfig() { return { profile: STUB_PROFILE }; }
   setConfig(config) {
@@ -453,7 +568,15 @@ class FitageCard extends HTMLElement {
   format(v,u,key) {
     if (v === undefined || v === null || typeof v === "boolean" || (typeof v === "string" && v.trim() === "")) return "—";
     const n=Number(v); const digits=PRECISION[key] ?? 1;
-    return Number.isFinite(n) ? `${n.toLocaleString("nl-NL",{minimumFractionDigits:0,maximumFractionDigits:digits})}${u?` ${u}`:""}` : "—";
+    if (!Number.isFinite(n)) return "—";
+    const options={minimumFractionDigits:0,maximumFractionDigits:digits};
+    let formatted;
+    try {
+      formatted=new Intl.NumberFormat(numberFormatToLocale(this._hass?.locale),options).format(n);
+    } catch (e) {
+      formatted=new Intl.NumberFormat("en",options).format(n);
+    }
+    return `${formatted}${u?` ${u}`:""}`;
   }
   updateValues() {
     this.available.forEach(m => {
@@ -477,15 +600,19 @@ class FitageCard extends HTMLElement {
   }
   metricHtml(m) {
     const v=this.values(m);
+    const lang=cardLanguage(this._hass);
     const currentColor=this.currentColorFor(v.assessment);
     const currentStyle=currentColor?` style="color:${currentColor}"`:"";
-    const labelText=levelLabelText(v.assessment, cardLanguage(this._hass));
+    const labelText=levelLabelText(v.assessment, lang);
     const labelStyle=currentColor?` style="color:${currentColor}"`:"";
-    const cells=[`<div class="value"><small>Actueel</small><b id="current-${m.key}" class="current"${currentStyle}>${this.format(v.current,v.unit,m.key)}</b><small id="assessment-${m.key}" class="assessment"${labelStyle}${labelText?"":" hidden"}>${labelText||""}</small></div>`];
-    if(Number.isFinite(Number(v.min)))cells.push(`<div class="value"><small>Min normaal</small><b id="min-${m.key}" class="min">${this.format(v.min,v.unit,m.key)}</b></div>`);
-    if(Number.isFinite(Number(v.max)))cells.push(`<div class="value"><small>Max normaal</small><b id="max-${m.key}" class="max">${this.format(v.max,v.unit,m.key)}</b></div>`);
-    const graph=this.config.display === "compact" ? "" : `<div class="graph" id="graph-${m.key}">Grafiek laden…</div>`;
-    return `<ha-card class="metric"><h2>${m.title}</h2><div class="values" style="--value-columns:${cells.length}">${cells.join("")}</div>${graph}</ha-card>`;
+    const minimumLabel=haLocalize(this._hass,"ui.panel.lovelace.editor.card.generic.minimum","Minimum");
+    const maximumLabel=haLocalize(this._hass,"ui.panel.lovelace.editor.card.generic.maximum","Maximum");
+    const loadingLabel=haLocalize(this._hass,"ui.common.loading","Loading");
+    const cells=[`<div class="value"><small>${currentLabel(lang)}</small><b id="current-${m.key}" class="current"${currentStyle}>${this.format(v.current,v.unit,m.key)}</b><small id="assessment-${m.key}" class="assessment"${labelStyle}${labelText?"":" hidden"}>${labelText||""}</small></div>`];
+    if(Number.isFinite(Number(v.min)))cells.push(`<div class="value"><small>${minimumLabel}</small><b id="min-${m.key}" class="min">${this.format(v.min,v.unit,m.key)}</b></div>`);
+    if(Number.isFinite(Number(v.max)))cells.push(`<div class="value"><small>${maximumLabel}</small><b id="max-${m.key}" class="max">${this.format(v.max,v.unit,m.key)}</b></div>`);
+    const graph=this.config.display === "compact" ? "" : `<div class="graph" id="graph-${m.key}">${loadingLabel}</div>`;
+    return `<ha-card class="metric"><h2>${metricTitle(m, lang)}</h2><div class="values" style="--value-columns:${cells.length}">${cells.join("")}</div>${graph}</ha-card>`;
   }
   appearance() {
     const scale={small:0.85,normal:1,large:1.18}[this.config.text_size] || 1;
@@ -500,8 +627,8 @@ class FitageCard extends HTMLElement {
           ? this.available.map(m=>this.metricHtml(m)).join("")
           : `<ha-card><div class="message">Selecteer minimaal één meetwaarde in de kaarteditor.</div></ha-card>`)
       : `<ha-card><div class="message">FITAGE-profiel en statistieken laden…</div></ha-card>`;
-    const periods=this.config.display === "compact" ? "" : `<div class="periods">${ranges.map(r=>`<button data-range="${r}" class="${r===this.range?"selected":""}">${r}</button>`).join("")}</div>`;
-    this.shadowRoot.innerHTML=`<style>:host{display:block;${this.appearance()}}.top{margin-bottom:12px}.title{padding:14px 16px 12px;font-size:calc(18px * var(--fitage-text-scale));font-weight:600}.periods{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:0 12px 12px}.periods button{min-height:40px;border:1px solid var(--divider-color);border-radius:22px;background:var(--ha-card-background,var(--card-background-color));color:var(--primary-text-color);font:inherit;font-weight:600}.periods button.selected{background:var(--primary-color);color:var(--text-primary-color);border-color:var(--primary-color)}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.metric{overflow:hidden}.metric h2{padding:14px 16px;margin:0;font-size:calc(17px * var(--fitage-text-scale))}.values{display:grid;grid-template-columns:repeat(var(--value-columns,1),1fr);border-block:1px solid var(--divider-color)}.compact .values{border-bottom:0}.value{text-align:center;padding:12px 3px 9px}.value+.value{border-left:1px solid var(--divider-color)}small{display:block;margin-bottom:4px;font-size:calc(12px * var(--fitage-text-scale))}b{display:block;font-size:calc(21px * var(--fitage-text-scale));white-space:nowrap}.assessment{margin-top:2px;margin-bottom:0;opacity:.85;color:var(--fitage-current-color)}.assessment[hidden]{display:none}.current{color:var(--fitage-current-color)}.min{color:var(--fitage-min-color)}.max{color:var(--fitage-max-color)}.graph{min-height:210px;padding:0;color:var(--secondary-text-color)}.graph>*{--ha-card-border-width:0;--ha-card-box-shadow:none}.message{padding:24px 16px}.error{color:var(--error-color,#f44336)}@media(max-width:1200px){.cards{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:900px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.cards{grid-template-columns:1fr}.periods{gap:4px;padding-inline:8px}.periods button{min-width:0}}</style><ha-card class="top"><div class="title">${this.config.title} – ${this.config.profile}</div>${periods}</ha-card>${this.error?`<ha-card><div class="message error">${this.error}</div></ha-card>`:this.hint?`<ha-card><div class="message">${this.hint}</div></ha-card>`:`<div class="cards ${this.config.display === "compact" ? "compact" : "graphs"}">${content}</div>`}`;
+    const periods=this.config.display === "compact" ? "" : `<div class="periods">${ranges.map(r=>`<button data-range="${r}" class="${r===this.range?"selected":""}">${periodLabel(r,this._hass)}</button>`).join("")}</div>`;
+    this.shadowRoot.innerHTML=`<style>:host{display:block;${this.appearance()}}.top{margin-bottom:12px}.title{padding:14px 16px 12px;font-size:calc(18px * var(--fitage-text-scale));font-weight:600}.periods{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:0 12px 12px}.periods button{min-height:40px;border:1px solid var(--divider-color);border-radius:22px;background:var(--ha-card-background,var(--card-background-color));color:var(--primary-text-color);font:inherit;font-weight:600}.periods button.selected{background:var(--primary-color);color:var(--text-primary-color);border-color:var(--primary-color)}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.metric{overflow:hidden}.metric h2{padding:14px 16px;margin:0;font-size:calc(17px * var(--fitage-text-scale))}.values{display:grid;grid-template-columns:repeat(var(--value-columns,1),1fr);border-block:1px solid var(--divider-color)}.compact .values{border-bottom:0}.value{text-align:center;padding:12px 3px 9px}.value+.value{border-inline-start:1px solid var(--divider-color)}small{display:block;margin-bottom:4px;font-size:calc(12px * var(--fitage-text-scale))}b{display:block;font-size:calc(21px * var(--fitage-text-scale));white-space:nowrap}.assessment{margin-top:2px;margin-bottom:0;opacity:.85;color:var(--fitage-current-color)}.assessment[hidden]{display:none}.current{color:var(--fitage-current-color)}.min{color:var(--fitage-min-color)}.max{color:var(--fitage-max-color)}.graph{min-height:210px;padding:0;color:var(--secondary-text-color)}.graph>*{--ha-card-border-width:0;--ha-card-box-shadow:none}.message{padding:24px 16px}.error{color:var(--error-color,#f44336)}@media(max-width:1200px){.cards{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:900px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:600px){.cards{grid-template-columns:1fr}.periods{gap:4px;padding-inline:8px}.periods button{min-width:0}}</style><ha-card class="top"><div class="title">${this.config.title} – ${this.config.profile}</div>${periods}</ha-card>${this.error?`<ha-card><div class="message error">${this.error}</div></ha-card>`:this.hint?`<ha-card><div class="message">${this.hint}</div></ha-card>`:`<div class="cards ${this.config.display === "compact" ? "compact" : "graphs"}">${content}</div>`}`;
     this.shadowRoot.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>this.selectRange(b.dataset.range)));
     this.graphs.forEach((g,k)=>this.shadowRoot.querySelector(`#graph-${k}`)?.replaceChildren(g));
   }
@@ -515,7 +642,7 @@ class FitageCardEditor extends HTMLElement {
     if(!this.config)return;
     const selected=this.selected();
     const custom=this.config.custom_colors===true;
-    this.innerHTML=`<style>.field{display:block;margin:0 0 16px}.field input:not([type=checkbox]),.field select{box-sizing:border-box;width:100%;padding:10px}.heading{display:flex;align-items:center;justify-content:space-between;margin:20px 0 8px;font-weight:600}.actions{display:flex;gap:8px}.actions button{padding:6px 10px}.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}.metric-option,.check{display:flex;align-items:center;gap:8px;min-height:34px}.colors{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}.color input{height:42px;padding:3px!important}.color span{display:block;margin-bottom:4px;font-size:12px}@media(max-width:500px){.metrics,.colors{grid-template-columns:1fr}}</style><label class="field">FITAGE-profiel<br><input id="profile" value="${this.config.profile||""}"></label><label class="field">Titel<br><input id="title" value="${this.config.title||"FITAGE"}"></label><label class="field">Weergave<br><select id="display"><option value="graphs" ${(this.config.display||"graphs")==="graphs"?"selected":""}>Grafieken</option><option value="compact" ${this.config.display==="compact"?"selected":""}>Compact overzicht</option></select></label><div class="heading"><span>Uiterlijk</span></div><label class="field">Tekstgrootte<br><select id="text_size"><option value="small" ${this.config.text_size==="small"?"selected":""}>Klein</option><option value="normal" ${(this.config.text_size||"normal")==="normal"?"selected":""}>Normaal</option><option value="large" ${this.config.text_size==="large"?"selected":""}>Groot</option></select></label><label class="check"><input type="checkbox" id="custom_colors" ${custom?"checked":""}>Eigen kleuren gebruiken</label><div class="colors"><label class="color"><span>Actueel</span><input type="color" id="current_color" value="${this.config.current_color||"#ff9800"}" ${custom?"":"disabled"}></label><label class="color"><span>Minimum</span><input type="color" id="min_color" value="${this.config.min_color||"#03a9f4"}" ${custom?"":"disabled"}></label><label class="color"><span>Maximum</span><input type="color" id="max_color" value="${this.config.max_color||"#f44336"}" ${custom?"":"disabled"}></label></div><div class="heading"><span>Meetwaarden</span><span class="actions"><button type="button" id="all">Alles</button><button type="button" id="none">Geen</button></span></div><div class="metrics">${METRICS.map(m=>`<label class="metric-option"><input type="checkbox" data-metric="${m.key}" ${selected.has(m.key)?"checked":""}>${m.title}</label>`).join("")}</div>`;
+    this.innerHTML=`<style>.field{display:block;margin:0 0 16px}.field input:not([type=checkbox]),.field select{box-sizing:border-box;width:100%;padding:10px}.heading{display:flex;align-items:center;justify-content:space-between;margin:20px 0 8px;font-weight:600}.actions{display:flex;gap:8px}.actions button{padding:6px 10px}.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px}.metric-option,.check{display:flex;align-items:center;gap:8px;min-height:34px}.colors{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}.color input{height:42px;padding:3px!important}.color span{display:block;margin-bottom:4px;font-size:12px}@media(max-width:500px){.metrics,.colors{grid-template-columns:1fr}}</style><label class="field">FITAGE-profiel<br><input id="profile" value="${this.config.profile||""}"></label><label class="field">Titel<br><input id="title" value="${this.config.title||"FITAGE"}"></label><label class="field">Weergave<br><select id="display"><option value="graphs" ${(this.config.display||"graphs")==="graphs"?"selected":""}>Grafieken</option><option value="compact" ${this.config.display==="compact"?"selected":""}>Compact overzicht</option></select></label><div class="heading"><span>Uiterlijk</span></div><label class="field">Tekstgrootte<br><select id="text_size"><option value="small" ${this.config.text_size==="small"?"selected":""}>Klein</option><option value="normal" ${(this.config.text_size||"normal")==="normal"?"selected":""}>Normaal</option><option value="large" ${this.config.text_size==="large"?"selected":""}>Groot</option></select></label><label class="check"><input type="checkbox" id="custom_colors" ${custom?"checked":""}>Eigen kleuren gebruiken</label><div class="colors"><label class="color"><span>Actueel</span><input type="color" id="current_color" value="${this.config.current_color||"#ff9800"}" ${custom?"":"disabled"}></label><label class="color"><span>Minimum</span><input type="color" id="min_color" value="${this.config.min_color||"#03a9f4"}" ${custom?"":"disabled"}></label><label class="color"><span>Maximum</span><input type="color" id="max_color" value="${this.config.max_color||"#f44336"}" ${custom?"":"disabled"}></label></div><div class="heading"><span>Meetwaarden</span><span class="actions"><button type="button" id="all">Alles</button><button type="button" id="none">${haLocalize(this._hass,"ui.common.none","None")}</button></span></div><div class="metrics">${METRICS.map(m=>`<label class="metric-option"><input type="checkbox" data-metric="${m.key}" ${selected.has(m.key)?"checked":""}>${metricTitle(m, cardLanguage(this._hass))}</label>`).join("")}</div>`;
     ["profile","title","display","text_size","current_color","min_color","max_color"].forEach(id=>this.querySelector(`#${id}`).addEventListener("change",event=>this.dispatch({...this.config,[id]:event.target.value})));
     this.querySelector("#custom_colors").addEventListener("change",event=>this.dispatch({...this.config,custom_colors:event.target.checked}));
     this.querySelectorAll("[data-metric]").forEach(input=>input.addEventListener("change",()=>{

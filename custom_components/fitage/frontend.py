@@ -62,7 +62,7 @@ STATIC_URL_PATH = f"/{DOMAIN}/{CARD_FILENAME}"
 # this. Reading the version out of the JS file at runtime would require a
 # blocking file read during async_setup, which Home Assistant flags and
 # custom integrations must not do.
-CARD_VERSION = "0.6.3"
+CARD_VERSION = "0.6.4"
 
 MODULE_URL = f"{STATIC_URL_PATH}?v={CARD_VERSION}"
 
