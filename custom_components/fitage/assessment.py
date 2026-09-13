@@ -394,20 +394,28 @@ def assess_measurement(
                     weight * water / 100, *mass_bounds
                 )
 
-        bone_bounds = (3.0, 5.0) if gender == 1 else (2.5, 4.0)
-        add_three_zone(
-            "bone",
-            "bone",
-            bone_bounds,
-            ("below_average", "average", "above_average"),
-        )
+        # Official FITAGE bone-mass bounds are a fixed percentage of body
+        # weight (3%-5% male, 2.5%-4% female for the occident standard,
+        # reverse-engineered from the app's own bone_mass/bone_ratio level
+        # functions), not a fixed kilogram range - both bone (kg) and
+        # bone_ratio (%) therefore require a known weight.
+        bone_percentage_bounds = (3.0, 5.0) if gender == 1 else (2.5, 4.0)
         if weight is not None and weight > 0:
             bone = _number_in_range(measurement, "bone", 0, weight)
             if bone is not None:
-                ratio_bounds = tuple(value / weight * 100 for value in bone_bounds)
+                bone_bounds = tuple(
+                    weight * value / 100 for value in bone_percentage_bounds
+                )
+                assessments["bone"] = _assessment(
+                    bone,
+                    *bone_bounds,
+                    "below_average",
+                    "average",
+                    "above_average",
+                )
                 assessments["bone_ratio"] = _assessment(
                     bone / weight * 100,
-                    *ratio_bounds,
+                    *bone_percentage_bounds,
                     "below_average",
                     "average",
                     "above_average",
