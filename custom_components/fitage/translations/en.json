@@ -9,7 +9,19 @@
           "email": "Email",
           "password": "Password"
         }
+      },
+      "reauth_confirm": {
+        "title": "Reauthenticate FITAGE",
+        "description": "Enter your FITAGE account password to reconnect Home Assistant.",
+        "data": {
+          "password": "Password"
+        }
       }
+    },
+    "error": {
+      "invalid_auth": "The FITAGE email or password is incorrect.",
+      "cannot_connect": "Unable to connect to FITAGE. Check your internet connection and try again.",
+      "unknown": "An unexpected FITAGE API error occurred. Try again later."
     }
   },
   "entity": {

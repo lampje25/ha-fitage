@@ -1,6 +1,6 @@
 # FITAGE v1.4.1 announcement drafts
 
-These texts are final drafts for review. Nothing in this file has been published. FITAGE is an independent custom integration and is not affiliated with or supported by Home Assistant, FITAGE, QingNiu, or QNClouds. FITAGE v1.4.1 requires Home Assistant 2025.12.0 or newer.
+These are unpublished v1.4.1 drafts and are retained as historical material, not current installation guidance. FITAGE has been in the HACS default catalog since 2026-10-19; the custom-repository instructions and pending-status statements below are obsolete. FITAGE is an independent custom integration and is not affiliated with or supported by Home Assistant, FITAGE, QingNiu, or QNClouds. FITAGE v1.4.1 requires Home Assistant 2025.12.0 or newer.
 
 ## Home Assistant Community Forum
 

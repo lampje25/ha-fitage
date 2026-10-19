@@ -10,7 +10,7 @@ import time
 import urllib.parse
 from typing import Any
 
-from aiohttp import ClientSession, ClientTimeout
+from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 
@@ -33,6 +33,14 @@ _LOGGER = logging.getLogger("custom_components.fitage.api")
 
 class FeelfitApiError(Exception):
     """Exception for FITAGE API errors."""
+
+
+class FeelfitAuthError(FeelfitApiError):
+    """Exception for invalid or expired FITAGE authentication."""
+
+
+class FeelfitConnectionError(FeelfitApiError):
+    """Exception for FITAGE network connection failures."""
 
 
 class FeelfitApi:
@@ -58,6 +66,18 @@ class FeelfitApi:
         query = urllib.parse.urlencode(params, safe="/")
         return f"{API_BASE}{path}?{query}"
 
+    @staticmethod
+    async def _is_auth_error_response(response: ClientResponse) -> bool:
+        """Classify explicit API auth errors without exposing the response body."""
+        try:
+            result = await response.json(content_type=None)
+        except (ClientError, ValueError):
+            return response.status == 401
+
+        if isinstance(result, dict) and "code" in result:
+            return str(result["code"]) == "401"
+        return response.status == 401
+
     async def async_login(self, password: str) -> dict[str, Any]:
         """Authenticate with the FITAGE API."""
         encrypted_pw = await self.hass.async_add_executor_job(
@@ -72,29 +92,39 @@ class FeelfitApi:
             async with self._session.post(
                 url, headers=LOGIN_HEADERS, json=payload, timeout=timeout
             ) as resp:
-                text = await resp.text()
                 if resp.status != 200:
                     _LOGGER.error("Login HTTP error %s", resp.status)
-                    raise FeelfitApiError(f"HTTP {resp.status}: {text}")
+                    if await self._is_auth_error_response(resp):
+                        raise FeelfitAuthError("FITAGE login rejected")
+                    raise FeelfitApiError(f"FITAGE login returned HTTP {resp.status}")
                 result = await resp.json(content_type=None)
         except FeelfitApiError:
             raise
+        except (ClientError, TimeoutError, OSError) as exc:
+            _LOGGER.debug("Connection error while calling FITAGE login endpoint")
+            raise FeelfitConnectionError("FITAGE login connection failed") from exc
         except Exception as exc:
             _LOGGER.error("Error while calling FITAGE login endpoint")
-            raise FeelfitApiError(str(exc)) from exc
+            raise FeelfitApiError("FITAGE login request failed") from exc
 
+        if not isinstance(result, dict):
+            raise FeelfitApiError("Unexpected FITAGE login response")
         if str(result.get("code")) not in ("200", "0"):
-            _LOGGER.error("Login failed")
-            raise FeelfitApiError("Login failed")
+            if str(result.get("code")) == "401":
+                _LOGGER.error("FITAGE login was rejected")
+                raise FeelfitAuthError("FITAGE login rejected")
+            raise FeelfitApiError("FITAGE login API returned an error")
 
         data = result.get("data") or {}
         token_info = data.get("token_info") or {}
         token = token_info.get("token")
         remaining = token_info.get("remaining_time") or 0
 
-        if token:
-            self.token = token
-            self.token_expires = time.time() + float(remaining or 0)
+        if not isinstance(token, str) or not token:
+            raise FeelfitApiError("FITAGE login response did not contain a token")
+
+        self.token = token
+        self.token_expires = time.time() + float(remaining or 0)
 
         self.user_info = data.get("user_info") or {}
         _LOGGER.debug("Login succeeded")
@@ -123,17 +153,25 @@ class FeelfitApi:
 
         try:
             async with self._session.get(url, headers=headers, timeout=timeout) as resp:
-                text = await resp.text()
                 if resp.status != 200:
                     _LOGGER.error("FITAGE request returned HTTP %s", resp.status)
-                    raise FeelfitApiError(f"HTTP {resp.status}: {text}")
+                    if await self._is_auth_error_response(resp):
+                        raise FeelfitAuthError("FITAGE authentication rejected")
+                    raise FeelfitApiError(f"FITAGE returned HTTP {resp.status}")
                 result = await resp.json(content_type=None)
         except FeelfitApiError:
             raise
+        except (ClientError, TimeoutError, OSError) as exc:
+            _LOGGER.debug("Connection error while calling a FITAGE endpoint")
+            raise FeelfitConnectionError("FITAGE connection failed") from exc
         except Exception as exc:
             _LOGGER.error("Error while calling a FITAGE endpoint")
-            raise FeelfitApiError(str(exc)) from exc
+            raise FeelfitApiError("FITAGE request failed") from exc
 
+        if isinstance(result, dict) and str(result.get("code")) == "401":
+            raise FeelfitAuthError("FITAGE authentication rejected")
+        if isinstance(result, dict) and str(result.get("code")) == "403":
+            raise FeelfitApiError("FITAGE API rejected the request")
         if isinstance(result, dict) and "data" in result:
             return result.get("data") or {}
         return result
@@ -186,6 +224,8 @@ class FeelfitApi:
                         else "Profilo Primario"
                     )
                 profiles.append(primary_user)
+        except FeelfitApiError:
+            raise
         except Exception:
             _LOGGER.error("Failed to fetch primary user")
 
@@ -219,6 +259,8 @@ class FeelfitApi:
                     )
                 profiles.append(user)
 
+        except FeelfitApiError:
+            raise
         except Exception:
             _LOGGER.warning("Failed to fetch sub users; they might not exist")
 
@@ -283,6 +325,8 @@ class FeelfitApi:
             primary_data = await self.async_get_primary_user()
             if isinstance(primary_data, dict) and "user_info" in primary_data:
                 self.user_info = primary_data.get("user_info") or self.user_info
+        except FeelfitApiError:
+            raise
         except Exception:
             _LOGGER.debug("Could not fetch profiles")
 
@@ -315,6 +359,8 @@ class FeelfitApi:
                 user_settings: dict[str, Any] = {}
                 goals: dict[str, Any] = {}
                 for idx, res in enumerate(results):
+                    if isinstance(res, FeelfitApiError):
+                        raise res
                     if isinstance(res, Exception):
                         _LOGGER.error("Failed to fetch profile data item %s", idx)
                         continue
@@ -378,6 +424,8 @@ class FeelfitApi:
             measurements_data: dict[str, Any] = {}
 
             for idx, res in enumerate(results):
+                if isinstance(res, FeelfitApiError):
+                    raise res
                 if isinstance(res, Exception):
                     _LOGGER.error("Failed to fetch profile data item %s", idx)
                     continue
@@ -403,6 +451,8 @@ class FeelfitApi:
                     )
                     measurements_data = fallback or {}
                     measurements_list = measurements_data.get("measurements") or []
+                except FeelfitApiError:
+                    raise
                 except Exception:
                     _LOGGER.debug("Fallback measurements fetch failed")
 
@@ -446,6 +496,8 @@ class FeelfitApi:
         device_binds_data: dict[str, Any] = {}
         try:
             device_binds_data = await self.async_list_device_binds()
+        except FeelfitApiError:
+            raise
         except Exception:
             _LOGGER.error("Error fetching device binds")
 

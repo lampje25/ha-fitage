@@ -8,7 +8,11 @@ from functools import wraps
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+from homeassistant.exceptions import ConfigEntryAuthFailed
+
 from custom_components.fitage import async_setup, async_setup_entry
+from custom_components.fitage.api import FeelfitAuthError
 from custom_components.fitage.const import DOMAIN
 
 
@@ -39,7 +43,7 @@ async def test_async_setup_entry_still_sets_up_the_integration() -> None:
     entry = fake_entry()
 
     api = MagicMock()
-    api.token = "token"
+    api.token = None
     api.user_info = {"user_id": "user-1"}
     api.async_fetch_all = AsyncMock(return_value={"profiles": [], "device_binds": {}})
 
@@ -66,3 +70,27 @@ async def test_async_setup_still_returns_true_and_registers_the_frontend() -> No
     )
     assert await async_setup(hass, {}) is True
     hass.http.async_register_static_paths.assert_awaited_once()
+
+
+@run_async
+async def test_async_setup_entry_raises_auth_failed_for_rejected_token() -> None:
+    hass = SimpleNamespace(
+        data={},
+        config_entries=SimpleNamespace(async_forward_entry_setups=AsyncMock()),
+    )
+    entry = fake_entry()
+    api = MagicMock()
+    api.token = "token"
+    api.user_info = {"user_id": "user-1"}
+    api.async_fetch_all = AsyncMock(side_effect=FeelfitAuthError)
+
+    with (
+        patch("custom_components.fitage.async_get_clientsession"),
+        patch("custom_components.fitage.FeelfitApi", return_value=api),
+        patch("custom_components.fitage.FitageHistoryManager") as history_cls,
+        patch("custom_components.fitage.FitageStatisticsImporter"),
+        patch("custom_components.fitage.async_register_history_websocket"),
+        pytest.raises(ConfigEntryAuthFailed),
+    ):
+        history_cls.return_value.async_load = AsyncMock()
+        await async_setup_entry(hass, entry)

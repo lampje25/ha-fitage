@@ -13,7 +13,12 @@ from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import FeelfitApi, FeelfitApiError
+from .api import (
+    FeelfitApi,
+    FeelfitApiError,
+    FeelfitAuthError,
+    FeelfitConnectionError,
+)
 from .const import (
     CONF_IMPORT_HISTORY_STATISTICS,
     CONF_PROFILES_LIST,
@@ -30,6 +35,7 @@ STEP_USER_DATA_SCHEMA = vol.Schema(
         vol.Required("password"): str,
     }
 )
+STEP_REAUTH_DATA_SCHEMA = vol.Schema({vol.Required("password"): str})
 
 
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
@@ -52,6 +58,7 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._email: str | None = None
         self._token: str | None = None
         self._token_expires: str | None = None
+        self._reauth_entry: config_entries.ConfigEntry | None = None
         self._user_info: dict[str, Any] = {}
         self._all_profiles: list[dict[str, Any]] = []
         self._label_to_user_id: dict[str, str] = {}
@@ -65,9 +72,13 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             try:
                 login_data = await validate_input(self.hass, user_input)
-            except FeelfitApiError:
-                _LOGGER.debug("Login attempt failed")
+            except FeelfitAuthError:
                 errors["base"] = "invalid_auth"
+            except FeelfitConnectionError:
+                errors["base"] = "cannot_connect"
+            except FeelfitApiError:
+                _LOGGER.debug("FITAGE login API request failed")
+                errors["base"] = "unknown"
             except Exception:
                 _LOGGER.error("Unexpected login error")
                 errors["base"] = "unknown"
@@ -88,6 +99,27 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 try:
                     self._all_profiles = await client.async_list_all_profiles()
                     _LOGGER.debug("Found %d profiles", len(self._all_profiles))
+                except FeelfitAuthError:
+                    errors["base"] = "invalid_auth"
+                    return self.async_show_form(
+                        step_id="user",
+                        data_schema=STEP_USER_DATA_SCHEMA,
+                        errors=errors,
+                    )
+                except FeelfitConnectionError:
+                    errors["base"] = "cannot_connect"
+                    return self.async_show_form(
+                        step_id="user",
+                        data_schema=STEP_USER_DATA_SCHEMA,
+                        errors=errors,
+                    )
+                except FeelfitApiError:
+                    errors["base"] = "unknown"
+                    return self.async_show_form(
+                        step_id="user",
+                        data_schema=STEP_USER_DATA_SCHEMA,
+                        errors=errors,
+                    )
                 except Exception:
                     _LOGGER.error("Failed to fetch profiles")
                     self._all_profiles = [self._user_info]
@@ -97,6 +129,64 @@ class FeelfitConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="user",
             data_schema=STEP_USER_DATA_SCHEMA,
+            errors=errors,
+        )
+
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
+        """Start reauthentication for an existing config entry."""
+        self._reauth_entry = self._get_reauth_entry()
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Ask for the FITAGE password and refresh the stored token."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            if self._reauth_entry is None:
+                self._reauth_entry = self._get_reauth_entry()
+
+            try:
+                login_data = await validate_input(
+                    self.hass,
+                    {
+                        "email": self._reauth_entry.data["email"],
+                        "password": user_input["password"],
+                    },
+                )
+            except FeelfitAuthError:
+                errors["base"] = "invalid_auth"
+            except FeelfitConnectionError:
+                errors["base"] = "cannot_connect"
+            except FeelfitApiError:
+                _LOGGER.debug("FITAGE reauthentication API request failed")
+                errors["base"] = "unknown"
+            except Exception:
+                _LOGGER.error("Unexpected reauthentication error")
+                errors["base"] = "unknown"
+            else:
+                token_info = login_data.get("token_info") or {}
+                remaining_time = token_info.get("remaining_time")
+                self.hass.config_entries.async_update_entry(
+                    self._reauth_entry,
+                    data={
+                        **self._reauth_entry.data,
+                        "token": token_info["token"],
+                        "token_expires": (
+                            str(int(remaining_time)) if remaining_time else None
+                        ),
+                    },
+                )
+                if not self._reauth_entry.update_listeners:
+                    self.hass.config_entries.async_schedule_reload(
+                        self._reauth_entry.entry_id
+                    )
+                return self.async_abort(reason="reauth_successful")
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=STEP_REAUTH_DATA_SCHEMA,
             errors=errors,
         )
 
