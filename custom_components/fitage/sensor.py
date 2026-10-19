@@ -14,6 +14,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import (
     CoordinatorEntity,
@@ -21,6 +22,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
+from .api import FeelfitAuthError
 from .assessment import assess_measurement
 from .const import (
     DOMAIN,
@@ -392,6 +394,8 @@ async def async_setup_entry(
                     _LOGGER.error("Unable to calculate FITAGE assessments")
             _LOGGER.debug("FITAGE coordinator fetched keys: %s", list(payload.keys()))
             return payload
+        except FeelfitAuthError as err:
+            raise ConfigEntryAuthFailed from err
         except Exception as err:
             _LOGGER.debug("FITAGE coordinator update failed")
             raise UpdateFailed("FITAGE fetch failed") from err
@@ -402,6 +406,7 @@ async def async_setup_entry(
         name="fitage",
         update_method=async_update_data,
         update_interval=SCAN_INTERVAL,
+        config_entry=entry,
     )
     data["coordinator"] = coordinator
 

@@ -13,6 +13,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 
+from .api import FeelfitApiError
 from .measurement import MASS_PERCENTAGE_KEYS, effective_mass_value
 
 HISTORY_STORE_VERSION = 1
@@ -364,6 +365,9 @@ class FitageHistoryManager:
                         last_updated_at=cursor[0],
                         last_measurement_id=cursor[1],
                     )
+                except FeelfitApiError:
+                    finish("api_error")
+                    raise
                 except Exception:  # noqa: BLE001 -- redact every API failure.
                     finish("api_error")
                     raise HistorySyncError(

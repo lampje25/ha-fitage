@@ -1,6 +1,6 @@
-# HACS default-catalog preparation
+# HACS default-catalog history
 
-This document prepares a future submission of `lampje25/ha-fitage` to the HACS default catalog. It is not a submission and does not authorize a pull request.
+FITAGE was officially added to the HACS default catalog on 2026-10-19. The material below records the preparation state from 2026-09-02 and is archived for reference; its submission instructions and status are no longer current.
 
 ## Verified status on 2026-09-02
 

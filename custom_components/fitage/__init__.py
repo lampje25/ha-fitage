@@ -7,11 +7,12 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
-from .api import FeelfitApi, FeelfitApiError
+from .api import FeelfitApi, FeelfitApiError, FeelfitAuthError
 from .const import (
     CONF_IMPORT_HISTORY_STATISTICS,
     CONF_SELECTED_PROFILES,
@@ -134,6 +135,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     "device_binds": payload.get("device_binds") or {},
                 }
             )
+    except FeelfitAuthError as err:
+        raise ConfigEntryAuthFailed from err
     except FeelfitApiError:
         _LOGGER.debug("Initial fetch failed; the coordinator will retry")
     except Exception:

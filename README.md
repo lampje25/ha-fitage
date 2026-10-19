@@ -6,7 +6,7 @@ This is an independent community project. It is not an official integration and 
 
 ## Highlights
 
-- Install through HACS as a custom repository or install manually.
+- Install from the standard HACS catalog or install manually.
 - Represent each linked FITAGE profile as a separate Home Assistant device.
 - Expose weight, BMI, body composition, heart rate, goals, and other measurements as sensors when supplied by the cloud.
 - Synchronize historical measurements while preserving their original timestamps.
@@ -32,6 +32,12 @@ Depending on the data returned for your profile and scale, the integration provi
 - Linked scale information
 
 The report-control sensors reproduce the verified normal FITAGE calculation route (`mea_category = 0`). They are unavailable for unsupported measurement categories rather than using an unverified calculation.
+
+## What's new in v1.6.2
+
+### Reauthentication and HACS catalog installation
+
+Expired FITAGE authentication now starts Home Assistant's reauthentication flow. Entering the account password refreshes the token without changing configured profiles, entities, history, or statistics. FITAGE is available directly from the standard HACS integration catalog; custom-repository setup is no longer needed.
 
 ## What's new in v1.6.1
 
@@ -123,7 +129,7 @@ If you manage Lovelace resources through YAML instead of the Home Assistant UI, 
 ```yaml
 lovelace:
   resources:
-    - url: /fitage/fitage-card.js?v=0.6.3
+    - url: /fitage/fitage-card.js?v=0.6.4
       type: module
 ```
 
@@ -206,14 +212,13 @@ Bone mass is judged against official weight-scaled bounds (for example 3%-5% of 
 
 ## Installation with HACS
 
-FITAGE v1.5.0 requires Home Assistant 2025.12.0 or newer.
+FITAGE requires Home Assistant 2025.12.0 or newer.
 
 1. Install [HACS](https://hacs.xyz/) if it is not already available.
-2. Open HACS in Home Assistant and select **Custom repositories** from the menu.
-3. Add `https://github.com/lampje25/ha-fitage` with category **Integration**.
-4. Find **FITAGE** in HACS and download it.
-5. Restart Home Assistant.
-6. Go to **Settings → Devices & services → Add integration**, search for **FITAGE**, and enter your FITAGE account credentials.
+2. Open HACS and find **FITAGE** in the integration catalog.
+3. Download FITAGE.
+4. Restart Home Assistant.
+5. Go to **Settings → Devices & services → Add integration**, search for **FITAGE**, and enter your FITAGE account credentials.
 
 ## Manual installation
 
