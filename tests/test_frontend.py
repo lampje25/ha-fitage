@@ -15,7 +15,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.fitage import async_setup
-from custom_components.fitage.assessment import ASSESSMENT_LABELS
+from custom_components.fitage.assessment import ASSESSMENT_LABELS, assess_measurement
+from custom_components.fitage.const import MEASUREMENT_METRICS
 from custom_components.fitage.frontend import (
     CARD_FILENAME,
     CARD_VERSION,
@@ -24,6 +25,7 @@ from custom_components.fitage.frontend import (
     STATIC_URL_PATH,
     async_register_frontend,
 )
+from custom_components.fitage.statistics import STATISTIC_METRICS
 
 CARD_PATH = (
     Path(__file__).parents[1] / "custom_components" / "fitage" / "www" / CARD_FILENAME
@@ -1155,29 +1157,29 @@ for (const [assessment, text] of EN_LABEL_CASES) {
   check(`English label for "${assessment}" must show "${text}"`, html.includes(`>${text}<`));
 }
 
-// 4) Missing assessment attribute: exact current orange fallback, no label.
+// 4) Missing assessment attribute: neutral theme color, no fabricated label.
 {
   const html = renderCurrentCell(undefined);
   check(
-    "missing assessment must not set an inline current color",
-    !/id="current-weight" class="current" style=/.test(html)
+    "missing assessment must use the theme's neutral text color",
+    html.includes('id="current-weight" class="current" style="color:var(--secondary-text-color)"')
   );
   check(
     "missing assessment must render the assessment element hidden and empty",
-    html.includes('id="assessment-weight" class="assessment" hidden></small>')
+    /id="assessment-weight" class="assessment"[^>]* hidden><\/small>/.test(html)
   );
 }
 
-// 5) Unknown assessment key: same exact fallback, never a fabricated label.
+// 5) Unknown assessment key: same neutral fallback, never a fabricated label.
 {
   const html = renderCurrentCell("een_onbekende_sleutel");
   check(
-    "unknown assessment must not set an inline current color",
-    !/id="current-weight" class="current" style=/.test(html)
+    "unknown assessment must use the theme's neutral text color",
+    html.includes('id="current-weight" class="current" style="color:var(--secondary-text-color)"')
   );
   check(
     "unknown assessment must render the assessment element hidden and empty",
-    html.includes('id="assessment-weight" class="assessment" hidden></small>')
+    /id="assessment-weight" class="assessment"[^>]* hidden><\/small>/.test(html)
   );
 }
 
@@ -1194,6 +1196,27 @@ for (const [assessment, text] of EN_LABEL_CASES) {
   check(
     "the manual current_color must still reach --fitage-current-color",
     el.appearance().includes("--fitage-current-color:#123456;")
+  );
+}
+
+// 7) A stale assessment attribute must not color an invalid current state.
+{
+  const html = renderCurrentCell("normal", {
+    states: {
+      "sensor.test_profiel_weight": {
+        state: "unavailable",
+        attributes: { assessment: "normal", normal_min: 60, normal_max: 90 },
+      },
+    },
+    language: "nl",
+  });
+  check(
+    "an invalid current state must use the neutral text color",
+    html.includes('id="current-weight" class="current" style="color:var(--secondary-text-color)"')
+  );
+  check(
+    "an invalid current state must not show a stale classification",
+    /id="assessment-weight" class="assessment"[^>]* hidden><\/small>/.test(html)
   );
 }
 
@@ -1948,6 +1971,87 @@ def test_bundled_card_ships_in_the_expected_distribution_location() -> None:
     assert CARD_PATH.is_file()
 
 
+def test_all_card_metrics_keep_their_live_history_and_unit_contract() -> None:
+    """Audit the complete card metric matrix against sensor and statistic APIs."""
+    content = CARD_PATH.read_text(encoding="utf-8")
+    match = re.search(r"const METRICS = \[(.*?)\]\.map", content, re.DOTALL)
+    assert match is not None
+    entries = re.findall(
+        r'\["(\w+)",\s*"[^"]+",\s*(null|"[^"]+"|\[[^\]]+\]),\s*"([^"]*)"\]',
+        match.group(1),
+    )
+    metrics = {
+        key: (
+            json.loads(entity)
+            if entity.startswith('"')
+            else None
+            if entity == "null"
+            else json.loads(entity),
+            unit,
+        )
+        for key, entity, unit in entries
+    }
+
+    expected = {
+        "weight": ("weight", "kg"),
+        "bmi": ("bmi", ""),
+        "bodyfat": ("bodyfat", "%"),
+        "water": ("hydration", "%"),
+        "muscle": ("muscle", "%"),
+        "protein": ("protein", "%"),
+        "bone": (["bone", "bone_mass"], "kg"),
+        "subfat": (["subfat", "subcutaneous_fat"], "%"),
+        "fat_free_weight": (None, "kg"),
+        "body_fat_mass": (None, "kg"),
+        "body_water_mass": (None, "kg"),
+        "protein_mass": (None, "kg"),
+        "bmr": ("bmr", "kcal"),
+        "score": (None, ""),
+    }
+    assert metrics == expected
+
+    assert set(metrics) <= set(STATISTIC_METRICS)
+    assert set(metrics) <= set(MEASUREMENT_METRICS)
+    for key, (_, unit) in metrics.items():
+        statistic_unit = STATISTIC_METRICS[key].unit or ""
+        assert unit == statistic_unit, key
+
+    assessment_sources = {
+        "weight": "weight",
+        "bmi": "bmi",
+        "bodyfat": "bodyfat",
+        "water": "water",
+        "muscle": "muscle",
+        "protein": "protein",
+        "bone": "bone",
+        "subfat": "subfat",
+        "fat_free_weight": None,
+        "body_fat_mass": "bodyfat",
+        "body_water_mass": "water",
+        "protein_mass": "protein",
+        "bmr": "bmr",
+        "score": None,
+    }
+    assert set(assessment_sources) == set(metrics)
+    expected_derived_assessment_sources = {
+        "body_fat_mass": "bodyfat",
+        "body_water_mass": "water",
+        "protein_mass": "protein",
+    }
+    assert {
+        key: source
+        for key, source in assessment_sources.items()
+        if source != key and source is not None
+    } == expected_derived_assessment_sources
+    percentage_mapping = re.search(r"const percentageMetric=\{([^}]*)\}", content)
+    assert percentage_mapping is not None
+    assert dict(re.findall(r'(\w+):"(\w+)"', percentage_mapping.group(1))) == (
+        expected_derived_assessment_sources
+    )
+
+    assert "statisticId(m) { return `${this.statisticPrefix}_${m.key}`; }" in content
+
+
 def test_bundled_card_is_version_0_6_5() -> None:
     assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.5";')
 
@@ -2057,7 +2161,7 @@ def test_assessment_color_and_label_mapping_matches_the_official_research() -> N
     """metricHtml() must color "Actueel" and show its category label using the
     official FITAGE per-category colors and text reverse-engineered from the
     real app (never a zone index, a gradient, or normal_min/normal_max), fall
-    back to today's exact orange with no label when the assessment is missing
+    back to a neutral theme color with no label when the assessment is missing
     or unknown, and still let an explicit, valid manual current_color win."""
     result = _run_node_js(_ASSESSMENT_JS_HARNESS)
     assert result.returncode == 0, result.stdout + result.stderr
@@ -2255,8 +2359,7 @@ function check(label, condition) { if (!condition) failures.push(label); }
 }
 
 // 4) A missing percentage source (e.g. not yet loaded, or gender unknown so
-// assessment.py omitted it) must not error and must keep today's exact
-// fallback: no inline color, no label - never a fabricated assessment.
+// assessment.py omitted it) must use a neutral color and no fabricated label.
 {
   const statesWithoutSources = { "sensor.test_profiel_weight": FULL_STATES["sensor.test_profiel_weight"] };
   const el = makeMassCard(statesWithoutSources);
@@ -2265,8 +2368,8 @@ function check(label, condition) { if (!condition) failures.push(label); }
     const v = el.values(metric);
     check(`${key} assessment must be undefined when its percentage source is missing`, v.assessment === undefined);
     const html = el.metricHtml(metric);
-    check(`${key} must not set an inline current color when its source is missing`, !new RegExp(`id="current-${key}" class="current" style=`).test(html));
-    check(`${key} must render its assessment element hidden and empty when its source is missing`, html.includes(`id="assessment-${key}" class="assessment" hidden></small>`));
+    check(`${key} must use a neutral current color when its source is missing`, html.includes(`id="current-${key}" class="current" style="color:var(--secondary-text-color)"`));
+    check(`${key} must render its assessment element hidden and empty when its source is missing`, new RegExp(`id="assessment-${key}" class="assessment"[^>]* hidden></small>`).test(html));
   }
 }
 
@@ -2296,11 +2399,211 @@ def test_derived_mass_metrics_inherit_assessment_from_percentage_sensor() -> Non
     from the corresponding percentage sensor (bodyfat/water/protein) - the
     reliable official category source - exactly like it already does for
     normal_min/normal_max, instead of leaving it undefined or recomputing a
-    category from the kg bounds. A missing source must keep the existing
-    orange/no-label fallback, and fat_free_weight/score must stay untouched."""
+    category from the kg bounds. A missing source must use the neutral
+    theme color with no label, and fat_free_weight/score stay unclassified."""
     result = _run_node_js(_DERIVED_MASS_ASSESSMENT_JS_HARNESS)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ALL DERIVED MASS ASSESSMENT CHECKS PASSED" in result.stdout
+
+
+@pytest.mark.skipif(NODE_BIN is None, reason="no local Node.js runtime available")
+def test_all_fourteen_cards_match_the_live_and_historical_metric_contract() -> None:
+    """Drive every metric through the real card using one synthetic FITAGE report."""
+    measurement = {
+        "weight": 70.0,
+        "height": 175.0,
+        "birthday": "1990-01-01",
+        "time_stamp": 1_735_689_600,
+        "gender": 1,
+        "bmi": 22.9,
+        "bmr": 3000.0,
+        "bodyfat": 28.0,
+        "fat_free_weight": 52.0,
+        "muscle": 45.6,
+        "sinew": 47.04,
+        "protein": 16.0,
+        "subfat": 20.0,
+        "water": 55.0,
+        "bone": 3.2,
+        "body_fat_mass": 19.6,
+        "body_water_mass": 38.5,
+        "protein_mass": 11.2,
+        "score": 80.0,
+    }
+    assessments = assess_measurement(measurement, {"area_code": "NL"})
+    entities = {
+        "weight": "weight",
+        "bmi": "bmi",
+        "bodyfat": "bodyfat",
+        "water": "hydration",
+        "muscle": "muscle",
+        "protein": "protein",
+        "bone": ["bone", "bone_mass"],
+        "subfat": ["subfat", "subcutaneous_fat"],
+        "fat_free_weight": None,
+        "body_fat_mass": None,
+        "body_water_mass": None,
+        "protein_mass": None,
+        "bmr": "bmr",
+        "score": None,
+    }
+    assessment_sources = {
+        "body_fat_mass": "bodyfat",
+        "body_water_mass": "water",
+        "protein_mass": "protein",
+    }
+    colors = {
+        "normal": "#46C083",
+        "overweight": "#E3B026",
+        "low": "#3A9BE6",
+        "average": "#46C083",
+        "high": "#E3B026",
+        "insufficient": "#3A9BE6",
+        "standard": "#46C083",
+    }
+    labels = {
+        "normal": "Normaal",
+        "overweight": "Overgewicht",
+        "low": "Laag",
+        "average": "Gemiddeld",
+        "high": "Hoog",
+        "insufficient": "Ontoereikend",
+        "standard": "Standaard",
+    }
+    entries = []
+    for key, entity in entities.items():
+        source = assessment_sources.get(key, key)
+        assessment = assessments.get(source, {})
+        value = measurement[key]
+        minimum = assessment.get("normal_min")
+        maximum = assessment.get("normal_max")
+        if key in assessment_sources:
+            percentage = assessments[source]
+            weight = measurement["weight"]
+            minimum = weight * percentage["normal_min"] / 100
+            maximum = weight * percentage["normal_max"] / 100
+        entries.append(
+            {
+                "key": key,
+                "entity": entity,
+                "unit": STATISTIC_METRICS[key].unit or "",
+                "value": value,
+                "assessmentSource": source,
+                "assessment": assessment.get("assessment"),
+                "min": minimum,
+                "max": maximum,
+                "color": colors.get(assessment.get("assessment")),
+                "label": labels.get(assessment.get("assessment")),
+            }
+        )
+
+    harness = (
+        _LOAD_CARD_JS_PRELUDE.replace(
+            "eval(src);", "eval(src + '\\nwindow.__FITAGE_METRICS__ = METRICS;');"
+        )
+        + "\nconst EXPECTED = "
+        + json.dumps(entries)
+        + r""";
+(async () => {
+  const states = {};
+  const byKey = Object.fromEntries(EXPECTED.map(item => [item.key, item]));
+  for (const item of EXPECTED) {
+    if (!item.entity) continue;
+    const source = item.assessmentSource;
+    const sourceItem = byKey[source];
+    const suffix = Array.isArray(item.entity) ? item.entity[0] : item.entity;
+    const attributes = { unit_of_measurement: item.unit };
+    if (sourceItem?.assessment) {
+      attributes.assessment = sourceItem.assessment;
+      if (sourceItem.min !== null) attributes.normal_min = sourceItem.min;
+      if (sourceItem.max !== null) attributes.normal_max = sourceItem.max;
+    }
+    states[`sensor.audit_${suffix}`] = { state: String(item.value), attributes };
+  }
+  // The card's muscle value and statistic must ignore this deliberately
+  // different, independently calculated muscle_ratio sensor.
+  states["sensor.audit_muscle_ratio"] = { state: "67.2", attributes: { unit_of_measurement: "%" } };
+  states["sensor.audit_sinew"] = { state: "47.04", attributes: { unit_of_measurement: "kg" } };
+  const hass = {
+    states,
+    language: "nl",
+    locale: { language: "nl", number_format: "language" },
+    callWS: async request => Object.fromEntries(request.statistic_ids.map(id => {
+      const key = id.slice("fitage:audit_".length);
+      return [id, [{ state: String(byKey[key]?.value) }]];
+    })),
+  };
+  const card = Object.create(Card.prototype);
+  card.config = { title: "FITAGE", profile: "audit", display: "graphs" };
+  card.slug = "audit";
+  card.statisticPrefix = "fitage:audit";
+  card._hass = hass;
+  card.available = window.__FITAGE_METRICS__;
+  card.latest = new Map();
+  await card.loadLatest();
+
+  const failures = [];
+  function check(condition, message) { if (!condition) failures.push(message); }
+  check(card.available.length === EXPECTED.length, "all 14 metrics must be available");
+  for (const item of EXPECTED) {
+    const metric = card.available.find(candidate => candidate.key === item.key);
+    check(!!metric, `${item.key}: metric definition must exist`);
+    if (!metric) continue;
+    const suffix = Array.isArray(item.entity) ? item.entity[0] : item.entity;
+    const entityId = suffix ? `sensor.audit_${suffix}` : null;
+    check(card.entityId(metric) === entityId, `${item.key}: live entity mapping`);
+    check(JSON.stringify(metric.entity) === JSON.stringify(item.entity), `${item.key}: live entity contract`);
+    check(card.statisticId(metric) === `fitage:audit_${item.key}`, `${item.key}: statistic mapping`);
+    check(Number(card.latest.get(item.key)) === Number(item.value), `${item.key}: historical value`);
+    const value = card.values(metric);
+    check(Number(value.current) === Number(item.value), `${item.key}: current value`);
+    check(value.unit === item.unit, `${item.key}: unit`);
+    check(metric.unit === item.unit, `${item.key}: declared unit`);
+    check(value.assessment === (item.assessment ?? undefined), `${item.key}: assessment source/value`);
+    check(item.min === null ? value.min === undefined : Math.abs(value.min - item.min) < 1e-8, `${item.key}: minimum`);
+    check(item.max === null ? value.max === undefined : Math.abs(value.max - item.max) < 1e-8, `${item.key}: maximum`);
+    const html = card.metricHtml(metric);
+    const currentCell = `id="current-${item.key}" class="current" style="color:${item.color || "var(--secondary-text-color)"}"`;
+    check(html.includes(currentCell), `${item.key}: current color`);
+    check(item.label ? html.includes(`>${item.label}<`) : new RegExp(`id="assessment-${item.key}" class="assessment"[^>]* hidden></small>`).test(html), `${item.key}: classification text`);
+    check(html.includes(`id="graph-${item.key}"`), `${item.key}: graph-mode element`);
+    card.config.display = "compact";
+    check(!card.metricHtml(metric).includes(`id="graph-${item.key}"`), `${item.key}: compact mode hides graph`);
+    card.config.display = "graphs";
+  }
+
+  // Missing or invalid values must not retain an assessment from stale attrs.
+  const invalidCard = Object.create(Card.prototype);
+  invalidCard.config = { title: "FITAGE", profile: "audit", display: "compact" };
+  invalidCard.slug = "audit";
+  invalidCard.statisticPrefix = "fitage:audit";
+  invalidCard.latest = new Map(EXPECTED.map(item => [item.key, "unavailable"]));
+  invalidCard._hass = { ...hass, states: Object.fromEntries(Object.entries(states).map(([id, state]) => [id, { ...state, state: "unavailable" }])) };
+  for (const metric of window.__FITAGE_METRICS__) {
+    const value = invalidCard.values(metric);
+    check(value.assessment === undefined, `${metric.key}: invalid state clears assessment`);
+    check(invalidCard.metricHtml(metric).includes(`id="current-${metric.key}" class="current" style="color:var(--secondary-text-color)"`), `${metric.key}: invalid state is neutral`);
+    check(invalidCard.metricHtml(metric).includes(`id="current-${metric.key}" class="current" style="color:var(--secondary-text-color)">—</b>`), `${metric.key}: invalid value renders as missing`);
+  }
+
+  // A weight alone must not cause the frontend to invent bone references
+  // when the backend deliberately omitted them.
+  const boneCard = Object.create(Card.prototype);
+  boneCard.config = {};
+  boneCard.slug = "audit";
+  boneCard._hass = { states: { "sensor.audit_weight": { state: "70" }, "sensor.audit_bone": { state: "3.2", attributes: {} } } };
+  boneCard.latest = new Map();
+  const bone = boneCard.values({ key: "bone", entity: "bone", unit: "kg" });
+  check(bone.min === undefined && bone.max === undefined, "bone references remain absent without backend attributes");
+
+  if (failures.length) throw new Error(failures.join("\n"));
+  console.log("ALL FOURTEEN METRIC AUDIT CHECKS PASSED");
+})().catch(error => { console.error(error.stack || error); process.exit(1); });
+"""
+    )
+    result = _run_node_js(harness)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ALL FOURTEEN METRIC AUDIT CHECKS PASSED" in result.stdout
 
 
 def test_level_colors_and_labels_cover_every_current_assessment_key() -> None:
