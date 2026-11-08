@@ -33,6 +33,12 @@ Depending on the data returned for your profile and scale, the integration provi
 
 The report-control sensors reproduce the verified normal FITAGE calculation route (`mea_category = 0`). They are unavailable for unsupported measurement categories rather than using an unverified calculation.
 
+## What's new in v1.6.4
+
+### Dashboard metric consistency
+
+The FITAGE Dashboard Card (`v0.6.6`) now uses the same raw `muscle` measurement for the live Spierverhouding value and assessment as for its historical graph, instead of the separately calculated `muscle_ratio`. Values without a valid classification use a neutral theme color, invalid live values no longer retain stale classifications, and the card no longer invents bone-mass reference bounds when the backend does not provide them. Regression coverage audits all 14 cards. No database or historical-statistics migration is required.
+
 ## What's new in v1.6.3
 
 ### Home Assistant 2026.11 graph compatibility
@@ -135,7 +141,7 @@ If you manage Lovelace resources through YAML instead of the Home Assistant UI, 
 ```yaml
 lovelace:
   resources:
-    - url: /fitage/fitage-card.js?v=0.6.5
+    - url: /fitage/fitage-card.js?v=0.6.6
       type: module
 ```
 

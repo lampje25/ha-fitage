@@ -1,4 +1,4 @@
-"""Release invariants for FITAGE v1.6.3."""
+"""Release invariants for FITAGE v1.6.4."""
 
 from __future__ import annotations
 
@@ -26,9 +26,9 @@ def run_async(func):
     return wrapped
 
 
-def test_manifest_is_valid_v163_hacs_release() -> None:
+def test_manifest_is_valid_v164_hacs_release() -> None:
     manifest = json.loads((COMPONENT / "manifest.json").read_text())
-    assert manifest["version"] == "1.6.3"
+    assert manifest["version"] == "1.6.4"
     assert manifest["domain"] == DOMAIN
     assert manifest["config_flow"] is True
     assert manifest["after_dependencies"] == ["lovelace", "recorder"]

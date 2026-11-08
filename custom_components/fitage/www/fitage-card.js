@@ -1,4 +1,4 @@
-const VERSION = "0.6.5";
+const VERSION = "0.6.6";
 const STUB_PROFILE = "jouw_profiel";
 const METRICS = [
   ["weight", "Gewicht", "weight", "kg"], ["bmi", "BMI", "bmi", ""],
