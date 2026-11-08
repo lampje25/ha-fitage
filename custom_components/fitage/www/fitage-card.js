@@ -3,7 +3,7 @@ const STUB_PROFILE = "jouw_profiel";
 const METRICS = [
   ["weight", "Gewicht", "weight", "kg"], ["bmi", "BMI", "bmi", ""],
   ["bodyfat", "Lichaamsvet", "bodyfat", "%"], ["water", "Lichaamswater", "hydration", "%"],
-  ["muscle", "Spierverhouding", "muscle_ratio", "%"], ["protein", "Eiwit", "protein", "%"],
+  ["muscle", "Spierverhouding", "muscle", "%"], ["protein", "Eiwit", "protein", "%"],
   ["bone", "Botmassa", ["bone", "bone_mass"], "kg"], ["subfat", "Onderhuids vet", ["subfat", "subcutaneous_fat"], "%"],
   ["fat_free_weight", "Vetvrij gewicht", null, "kg"], ["body_fat_mass", "Vetmassa", null, "kg"],
   ["body_water_mass", "Watermassa", null, "kg"], ["protein_mass", "Eiwitmassa", null, "kg"],
@@ -535,9 +535,11 @@ class FitageCard extends HTMLElement {
     // percentage sensor is the reliable assessment source, so its
     // `assessment` attribute is copied verbatim, independent of weight.
     let assessment=state?.attributes?.assessment;
+    let assessmentState=state;
     if(percentageMetric){
       const source=METRICS.find(item=>item.key===percentageMetric);
       const percentageState=this._hass?.states?.[this.entityId(source)];
+      assessmentState=percentageState;
       assessment=percentageState?.attributes?.assessment;
       if(Number.isFinite(weight) && weight>0){
         const percentageMin=Number(percentageState?.attributes?.normal_min);
@@ -546,23 +548,19 @@ class FitageCard extends HTMLElement {
         if(Number.isFinite(percentageMax))max=weight*percentageMax/100;
       }
     }
-    if(m.key==="bone" && Number.isFinite(weight) && weight>0){
-      if(!Number.isFinite(Number(min)))min=weight*0.03;
-      if(!Number.isFinite(Number(max)))max=weight*0.05;
-    }
     if(m.key==="bmr")max=undefined;
-    return { current: state ? state.state : this.latest.get(m.key), min, max, unit:state?.attributes?.unit_of_measurement ?? m.unit, assessment };
+    const current=state ? state.state : this.latest.get(m.key);
+    const validNumber=value=>(typeof value==="number"&&Number.isFinite(value))||(typeof value==="string"&&value.trim()!==""&&Number.isFinite(Number(value)));
+    if(!validNumber(current)||!validNumber(assessmentState?.state))assessment=undefined;
+    return { current, min, max, unit:state?.attributes?.unit_of_measurement ?? m.unit, assessment };
   }
   // The color "Actueel" must use for this metric right now: an explicit,
-  // valid manual current_color always wins (an intentional accent choice,
-  // documented alongside min_color/max_color as a flat per-role override -
-  // never assessment-aware), null otherwise so the caller falls back to the
-  // existing --fitage-current-color CSS variable (the fixed default orange
-  // when the assessment is missing or not one of LEVEL_COLORS' proven keys).
+  // valid manual current_color always wins; otherwise unclassified values
+  // use the theme's neutral secondary text color, never an invented warning.
   currentColorFor(assessment) {
     const manualOverride = this.config.custom_colors === true && isHexColor(this.config.current_color);
     if (manualOverride) return null;
-    return (assessment && LEVEL_COLORS[assessment]) || null;
+    return (assessment && LEVEL_COLORS[assessment]) || "var(--secondary-text-color)";
   }
   format(v,u,key) {
     if (v === undefined || v === null || typeof v === "boolean" || (typeof v === "string" && v.trim() === "")) return "—";
@@ -617,7 +615,7 @@ class FitageCard extends HTMLElement {
     const scale={small:0.85,normal:1,large:1.18}[this.config.text_size] || 1;
     const validColor=(value,fallback)=>isHexColor(value)?value:fallback;
     const custom=this.config.custom_colors===true;
-    return `--fitage-text-scale:${scale};--fitage-current-color:${custom?validColor(this.config.current_color,"#ff9800"):"var(--warning-color,#ff9800)"};--fitage-min-color:${custom?validColor(this.config.min_color,"#03a9f4"):"var(--info-color,#03a9f4)"};--fitage-max-color:${custom?validColor(this.config.max_color,"#f44336"):"var(--error-color,#f44336)"};`;
+    return `--fitage-text-scale:${scale};--fitage-current-color:${custom?validColor(this.config.current_color,"var(--secondary-text-color)"):"var(--secondary-text-color)"};--fitage-min-color:${custom?validColor(this.config.min_color,"#03a9f4"):"var(--info-color,#03a9f4)"};--fitage-max-color:${custom?validColor(this.config.max_color,"#f44336"):"var(--error-color,#f44336)"};`;
   }
   render() {
     if(!this.config)return; const ranges=["7d","14d","1m","3m","1j"];
