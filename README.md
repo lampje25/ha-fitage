@@ -33,6 +33,12 @@ Depending on the data returned for your profile and scale, the integration provi
 
 The report-control sensors reproduce the verified normal FITAGE calculation route (`mea_category = 0`). They are unavailable for unsupported measurement categories rather than using an unverified calculation.
 
+## What's new in v1.6.3
+
+### Home Assistant 2026.11 graph compatibility
+
+The FITAGE Dashboard Card (`v0.6.5`) now supports Home Assistant 2026.11's statistics graph card, where `hass` is an own property rather than a prototype accessor. The card continues to support earlier Home Assistant frontend behavior. Automated lifecycle regressions cover lazy loading, already-loaded graph cards, `hass` transfer, period changes, and reconfiguration. No FITAGE sensors, measurement calculations, or cloud API behavior changed.
+
 ## What's new in v1.6.2
 
 ### Reauthentication and HACS catalog installation
@@ -129,7 +135,7 @@ If you manage Lovelace resources through YAML instead of the Home Assistant UI, 
 ```yaml
 lovelace:
   resources:
-    - url: /fitage/fitage-card.js?v=0.6.4
+    - url: /fitage/fitage-card.js?v=0.6.5
       type: module
 ```
 

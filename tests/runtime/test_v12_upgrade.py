@@ -13,7 +13,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from tests.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.fitage.const import (
     DOMAIN,

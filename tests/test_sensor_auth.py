@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from homeassistant.config_entries import SOURCE_REAUTH
 from homeassistant.core import HomeAssistant
-from tests.common import MockConfigEntry
+from pytest_homeassistant.common import MockConfigEntry
 
 from custom_components.fitage.api import FeelfitAuthError
 from custom_components.fitage.config_flow import FeelfitConfigFlow

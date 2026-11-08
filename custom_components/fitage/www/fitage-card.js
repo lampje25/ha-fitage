@@ -1,4 +1,4 @@
-const VERSION = "0.6.4";
+const VERSION = "0.6.5";
 const STUB_PROFILE = "jouw_profiel";
 const METRICS = [
   ["weight", "Gewicht", "weight", "kg"], ["bmi", "BMI", "bmi", ""],
@@ -262,9 +262,9 @@ function periodLabel(range, hass) {
 // any property - not even .hass - until after customElements.whenDefined(
 // GRAPH_CARD_TAG) has resolved, by which point Home Assistant's own
 // upgrade()+setConfig() .then() (registered on that exact promise the
-// moment createCardElement() ran) has already applied the real class, so
-// every property we set from then on is guaranteed to go through its real
-// accessor.
+// moment createCardElement() ran) has already applied the real class. This
+// avoids pre-upgrade property shadowing while allowing hass to be delivered
+// through either the class's accessor or a normal own property.
 const GRAPH_CARD_TYPE = "statistics-graph";
 const GRAPH_CARD_TAG = `hui-${GRAPH_CARD_TYPE}-card`;
 
@@ -509,7 +509,6 @@ class FitageCard extends HTMLElement {
         !this._hass ||
         !this._hass.config ||
         !(graph instanceof customElements.get(GRAPH_CARD_TAG)) ||
-        Object.hasOwn(graph, "hass") ||
         !graph.hass ||
         graph.hass !== this._hass ||
         !graph.hass.config

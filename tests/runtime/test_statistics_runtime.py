@@ -9,7 +9,9 @@ import pytest
 from homeassistant.components.recorder import Recorder
 from homeassistant.components.recorder.statistics import statistics_during_period
 from homeassistant.core import HomeAssistant
-from tests.components.recorder.common import async_wait_recording_done
+from pytest_homeassistant.components.recorder.common import (
+    async_wait_recording_done,
+)
 
 from custom_components.fitage.history import FitageHistoryManager
 from custom_components.fitage.statistics import (

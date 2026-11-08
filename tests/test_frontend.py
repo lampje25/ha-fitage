@@ -1299,6 +1299,22 @@ Object.defineProperty(GraphCard.prototype, "hass", {
   get() { return this.__hassValue; },
   set(v) { hassSetterCalls += 1; this.__hassValue = v; },
 });
+class GraphCardWithoutHassAccessor {
+  setConfig(cfg) {
+    this._config = cfg;
+    this.__lifecycle = ["configured"];
+  }
+  connectedCallback() {
+    if (!this._config) violations.push("2026.11 connectedCallback fired before setConfig");
+    if (!Object.hasOwn(this, "hass")) violations.push("2026.11 hass was not assigned before DOM connection");
+    if (!this.hass?.config) violations.push("2026.11 connectedCallback fired without hass.config");
+    this.__lifecycle.push("connected");
+  }
+  disconnectedCallback() {}
+}
+// In frontend 2026.11 the statistics graph card no longer declares hass as
+// a Lit property, so the assignment after upgrade creates an own property.
+GraphCardWithoutHassAccessor.__isLovelaceStub = true;
 function upgradeElement(el, Ctor) {
   // Verified against the real, locally installed home-assistant-frontend in
   // an actual Chromium build: upgrading an element whose "hass" was set
@@ -1497,6 +1513,9 @@ async function scenarioD_periodSwitchIsSafe() {
   if (el.graphs.get("weight") !== container.child) {
     throw new Error("scenario D: this.graphs and the DOM disagree on which generation won");
   }
+  if (container.child._config.days_to_show !== 30) {
+    throw new Error("scenario D: the latest period selection must win the race");
+  }
 }
 
 async function scenarioE_editorPreviewReconfigureIsSafe() {
@@ -1525,6 +1544,9 @@ async function scenarioE_editorPreviewReconfigureIsSafe() {
   const container = el.shadowRoot.querySelector("#graph-weight");
   if (!container.child || container.child.hass === undefined) {
     throw new Error("scenario E: editor reconfigure during an in-flight createGraphs() must still end configured");
+  }
+  if (container.child._config.entities[0] !== "fitage:ander_profiel_weight") {
+    throw new Error("scenario E: the stale profile generation must not replace the reconfigured graph");
   }
 }
 
@@ -1779,6 +1801,49 @@ async function scenarioM9_validProfileWithCurrentPrefixKeepsWorking() {
   if (!el.ready) throw new Error("scenario M9: a valid profile must reach the ready state");
 }
 
+async function scenarioN_202611OwnHassPropertyDuringFirstLazyLoad() {
+  registry.factories.delete(GRAPH_CARD_TAG);
+  const el = makeCard(oneMetric());
+  const before = createCount;
+  const build = el.createGraphs();
+  await waitForCreateCount(before + 1);
+  registry.define(GRAPH_CARD_TAG, GraphCardWithoutHassAccessor);
+  await build;
+
+  const graph = el.graphs.get("weight");
+  const container = el.shadowRoot.querySelector("#graph-weight");
+  if (!graph || container.child !== graph) {
+    throw new Error("scenario N: first lazy-loaded 2026.11 graph was not attached");
+  }
+  if (!Object.hasOwn(graph, "hass")) {
+    throw new Error("scenario N: 2026.11 graph should receive hass as an own property");
+  }
+  if (graph.hass !== el._hass || !graph.hass.config) {
+    throw new Error("scenario N: 2026.11 graph did not retain the valid hass instance");
+  }
+  if (graph.__lifecycle.join(",") !== "configured,connected") {
+    throw new Error("scenario N: configuration and hass must precede DOM connection");
+  }
+}
+
+async function scenarioO_202611OwnHassPropertyWhenGraphIsAlreadyLoaded() {
+  registry.define(GRAPH_CARD_TAG, GraphCardWithoutHassAccessor);
+  const el = makeCard(oneMetric());
+  await el.createGraphs();
+
+  const graph = el.graphs.get("weight");
+  const container = el.shadowRoot.querySelector("#graph-weight");
+  if (!graph || container.child !== graph) {
+    throw new Error("scenario O: already-loaded 2026.11 graph was not attached");
+  }
+  if (!Object.hasOwn(graph, "hass") || graph.hass !== el._hass || !graph.hass.config) {
+    throw new Error("scenario O: already-loaded graph did not retain the valid own hass property");
+  }
+  if (graph.__lifecycle.join(",") !== "configured,connected") {
+    throw new Error("scenario O: configuration and hass must precede DOM connection");
+  }
+}
+
 async function scenarioK_theOldOrderReproducesTheSameCrash() {
   // Demonstrates the exact failure this fix closes: the *old* invariant
   // (graph.hass !== this._hass) does not reject two undefined values, so a
@@ -1823,6 +1888,8 @@ async function scenarioK_theOldOrderReproducesTheSameCrash() {
   await scenarioM7_validProfileSwitchedToStubMidPrefixResolutionBuildsNothing();
   await scenarioM8_stubLaterSwitchedToValidProfileBuildsOnlyAfterward();
   await scenarioM9_validProfileWithCurrentPrefixKeepsWorking();
+  await scenarioN_202611OwnHassPropertyDuringFirstLazyLoad();
+  await scenarioO_202611OwnHassPropertyWhenGraphIsAlreadyLoaded();
   await scenarioK_theOldOrderReproducesTheSameCrash();
   if (violations.length) {
     console.error(violations.join("\n"));
@@ -1841,13 +1908,16 @@ def run_async(func):
     return wrapped
 
 
-def fake_hass() -> SimpleNamespace:
+def fake_hass(config_dir: Path) -> SimpleNamespace:
     http = SimpleNamespace(async_register_static_paths=AsyncMock())
-    config = SimpleNamespace(config_dir="/tmp")
+    config = SimpleNamespace(
+        config_dir=str(config_dir),
+        path=lambda *parts: str(config_dir.joinpath(*parts)),
+    )
     return SimpleNamespace(data={}, http=http, config=config)
 
 
-def storage_lovelace_data(items: dict[str, dict] | None = None):
+def storage_lovelace_data(config_dir: Path, items: dict[str, dict] | None = None):
     """Build a real (non-mocked) storage-mode LovelaceData/ResourceStorageCollection
     pair, pre-loaded with `items` so tests exercise Home Assistant's own
     resource collection class instead of a hand-rolled stand-in.
@@ -1861,7 +1931,7 @@ def storage_lovelace_data(items: dict[str, dict] | None = None):
     from homeassistant.components.lovelace.const import LOVELACE_DATA, MODE_STORAGE
     from homeassistant.components.lovelace.resources import ResourceStorageCollection
 
-    hass = fake_hass()
+    hass = fake_hass(config_dir)
     resources = ResourceStorageCollection(hass, None)
     resources.loaded = True
     resources.data = dict(items or {})
@@ -1878,8 +1948,8 @@ def test_bundled_card_ships_in_the_expected_distribution_location() -> None:
     assert CARD_PATH.is_file()
 
 
-def test_bundled_card_is_version_0_6_4() -> None:
-    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.4";')
+def test_bundled_card_is_version_0_6_5() -> None:
+    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.5";')
 
 
 def test_card_version_constant_matches_the_javascript_version() -> None:
@@ -1917,7 +1987,7 @@ def test_static_url_path_matches_the_bundled_card() -> None:
 
 
 def test_module_url_is_exactly_the_expected_value() -> None:
-    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.4"
+    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.5"
 
 
 def test_default_stub_profile_shows_a_neutral_instruction_in_source() -> None:
@@ -1960,9 +2030,10 @@ def test_graph_element_is_never_connected_to_the_dom_before_it_is_configured() -
     createGraphs()/render() through a faithful simulation of Home
     Assistant's own createCardElement() lazy-loading race (see the harness
     docstring above for the exact Core-adjacent source reference) and checks
-    five scenarios: setConfig() before DOM attachment, a rerender while a
-    new generation is still loading, switching between graphs and compact,
-    rapid period switching, and an editor-preview reconfigure mid-flight."""
+    both the 2026.10 prototype-accessor and 2026.11 own-property hass models.
+    It covers first lazy loading and an already-defined card, ensures config
+    and hass are ready before DOM attachment, and exercises period changes,
+    stale-generation rejection, and editor-preview reconfiguration."""
     result = _run_node_js(_GRAPH_LIFECYCLE_JS_HARNESS)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ALL LIFECYCLE CHECKS PASSED" in result.stdout
@@ -2829,8 +2900,10 @@ def test_production_code_never_reads_the_card_file_for_its_version() -> None:
 
 
 @run_async
-async def test_static_path_registered_once_with_the_bundled_card() -> None:
-    hass, _resources = storage_lovelace_data()
+async def test_static_path_registered_once_with_the_bundled_card(
+    tmp_path: Path,
+) -> None:
+    hass, _resources = storage_lovelace_data(tmp_path)
     with patch("homeassistant.helpers.storage.Store.async_delay_save"):
         await async_register_frontend(hass)
     hass.http.async_register_static_paths.assert_awaited_once()
@@ -2841,8 +2914,10 @@ async def test_static_path_registered_once_with_the_bundled_card() -> None:
 
 
 @run_async
-async def test_no_existing_resource_creates_exactly_one_module_resource() -> None:
-    hass, resources = storage_lovelace_data()
+async def test_no_existing_resource_creates_exactly_one_module_resource(
+    tmp_path: Path,
+) -> None:
+    hass, resources = storage_lovelace_data(tmp_path)
     with patch("homeassistant.helpers.storage.Store.async_delay_save"):
         await async_register_frontend(hass)
     items = resources.async_items()
@@ -2852,9 +2927,12 @@ async def test_no_existing_resource_creates_exactly_one_module_resource() -> Non
 
 
 @run_async
-async def test_exact_resource_already_present_is_left_untouched() -> None:
+async def test_exact_resource_already_present_is_left_untouched(
+    tmp_path: Path,
+) -> None:
     hass, resources = storage_lovelace_data(
-        {"fitage-id": {"id": "fitage-id", "type": "module", "url": MODULE_URL}}
+        tmp_path,
+        {"fitage-id": {"id": "fitage-id", "type": "module", "url": MODULE_URL}},
     )
     with patch("homeassistant.helpers.storage.Store.async_delay_save") as delay_save:
         await async_register_frontend(hass)
@@ -2865,15 +2943,18 @@ async def test_exact_resource_already_present_is_left_untouched() -> None:
 
 
 @run_async
-async def test_older_integrated_version_is_updated_in_place() -> None:
+async def test_older_integrated_version_is_updated_in_place(
+    tmp_path: Path,
+) -> None:
     hass, resources = storage_lovelace_data(
+        tmp_path,
         {
             "fitage-id": {
                 "id": "fitage-id",
                 "type": "module",
                 "url": "/fitage/fitage-card.js?v=0.4.0",
             }
-        }
+        },
     )
     with patch("homeassistant.helpers.storage.Store.async_delay_save"):
         await async_register_frontend(hass)
@@ -2884,37 +2965,43 @@ async def test_older_integrated_version_is_updated_in_place() -> None:
 
 
 @run_async
-async def test_resource_updates_from_v0_6_3_to_v0_6_4() -> None:
+async def test_resource_updates_from_v0_6_4_to_v0_6_5(
+    tmp_path: Path,
+) -> None:
     """The real-world upgrade this release ships: the previously-registered
-    v0.6.3 Lovelace resource must update in place to v0.6.4, not duplicate."""
+    v0.6.4 Lovelace resource must update in place to v0.6.5, not duplicate."""
     hass, resources = storage_lovelace_data(
+        tmp_path,
         {
             "fitage-id": {
                 "id": "fitage-id",
                 "type": "module",
-                "url": "/fitage/fitage-card.js?v=0.6.3",
+                "url": "/fitage/fitage-card.js?v=0.6.4",
             }
-        }
+        },
     )
     with patch("homeassistant.helpers.storage.Store.async_delay_save"):
         await async_register_frontend(hass)
     items = resources.async_items()
     assert len(items) == 1
     assert items[0]["id"] == "fitage-id"
-    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.4"
+    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.5"
     assert items[0]["url"] == MODULE_URL
 
 
 @run_async
-async def test_old_manual_prototype_resource_is_never_modified() -> None:
+async def test_old_manual_prototype_resource_is_never_modified(
+    tmp_path: Path,
+) -> None:
     hass, resources = storage_lovelace_data(
+        tmp_path,
         {
             "legacy-id": {
                 "id": "legacy-id",
                 "type": "module",
                 "url": f"{LEGACY_PROTOTYPE_URL_PATH}?v=0.4.0",
             }
-        }
+        },
     )
     with patch("homeassistant.helpers.storage.Store.async_delay_save"):
         await async_register_frontend(hass)
@@ -2925,16 +3012,17 @@ async def test_old_manual_prototype_resource_is_never_modified() -> None:
 
 @run_async
 async def test_old_manual_prototype_resource_logs_a_clear_warning(
-    caplog: pytest.LogCaptureFixture,
+    caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
     hass, _resources = storage_lovelace_data(
+        tmp_path,
         {
             "legacy-id": {
                 "id": "legacy-id",
                 "type": "module",
                 "url": f"{LEGACY_PROTOTYPE_URL_PATH}?v=0.4.0",
             }
-        }
+        },
     )
     with patch("homeassistant.helpers.storage.Store.async_delay_save"):
         await async_register_frontend(hass)
@@ -2943,15 +3031,16 @@ async def test_old_manual_prototype_resource_logs_a_clear_warning(
 
 
 @run_async
-async def test_unrelated_resources_are_never_touched() -> None:
+async def test_unrelated_resources_are_never_touched(tmp_path: Path) -> None:
     hass, resources = storage_lovelace_data(
+        tmp_path,
         {
             "other-id": {
                 "id": "other-id",
                 "type": "js",
                 "url": "/local/some-other-card.js?v=1",
             }
-        }
+        },
     )
     with patch("homeassistant.helpers.storage.Store.async_delay_save"):
         await async_register_frontend(hass)
@@ -2965,9 +3054,11 @@ async def test_unrelated_resources_are_never_touched() -> None:
 
 
 @run_async
-async def test_multiple_config_entries_do_not_cause_double_registration() -> None:
+async def test_multiple_config_entries_do_not_cause_double_registration(
+    tmp_path: Path,
+) -> None:
     """Simulates two FITAGE config entries both triggering setup on one hass."""
-    hass, resources = storage_lovelace_data()
+    hass, resources = storage_lovelace_data(tmp_path)
     with patch("homeassistant.helpers.storage.Store.async_delay_save"):
         await async_setup(hass, {})
         await async_setup(hass, {})
@@ -2976,8 +3067,10 @@ async def test_multiple_config_entries_do_not_cause_double_registration() -> Non
 
 
 @run_async
-async def test_config_entry_reload_does_not_cause_double_registration() -> None:
-    hass, resources = storage_lovelace_data()
+async def test_config_entry_reload_does_not_cause_double_registration(
+    tmp_path: Path,
+) -> None:
+    hass, resources = storage_lovelace_data(tmp_path)
     with patch("homeassistant.helpers.storage.Store.async_delay_save"):
         await async_register_frontend(hass)
         # A reload only re-runs async_setup_entry, never the domain async_setup,
@@ -2988,13 +3081,13 @@ async def test_config_entry_reload_does_not_cause_double_registration() -> None:
 
 @run_async
 async def test_yaml_resource_mode_is_handled_safely_without_touching_files(
-    caplog: pytest.LogCaptureFixture,
+    caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
     from homeassistant.components.lovelace import LovelaceData
     from homeassistant.components.lovelace.const import LOVELACE_DATA, MODE_YAML
     from homeassistant.components.lovelace.resources import ResourceYAMLCollection
 
-    hass = fake_hass()
+    hass = fake_hass(tmp_path)
     hass.data[LOVELACE_DATA] = LovelaceData(
         resource_mode=MODE_YAML,
         dashboards={},
@@ -3010,17 +3103,19 @@ async def test_yaml_resource_mode_is_handled_safely_without_touching_files(
 
 
 @run_async
-async def test_lovelace_not_set_up_does_not_fail_integration_setup() -> None:
-    hass = fake_hass()
+async def test_lovelace_not_set_up_does_not_fail_integration_setup(
+    tmp_path: Path,
+) -> None:
+    hass = fake_hass(tmp_path)
     result = await async_setup(hass, {})
     assert result is True
 
 
 @run_async
 async def test_resource_registration_failure_does_not_fail_integration_setup(
-    caplog: pytest.LogCaptureFixture,
+    caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
-    hass = fake_hass()
+    hass = fake_hass(tmp_path)
     with patch(
         "custom_components.fitage.frontend._async_register_lovelace_resource",
         side_effect=RuntimeError("boom"),
@@ -3033,9 +3128,9 @@ async def test_resource_registration_failure_does_not_fail_integration_setup(
 
 @run_async
 async def test_missing_card_file_logs_a_warning_and_does_not_raise(
-    caplog: pytest.LogCaptureFixture,
+    caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
-    hass = fake_hass()
+    hass = fake_hass(tmp_path)
     missing = Path("/nonexistent/fitage-card.js")
     with patch("custom_components.fitage.frontend._card_path", return_value=missing):
         await async_register_frontend(hass)
@@ -3044,8 +3139,10 @@ async def test_missing_card_file_logs_a_warning_and_does_not_raise(
 
 
 @run_async
-async def test_missing_card_file_does_not_fail_integration_setup() -> None:
-    hass = fake_hass()
+async def test_missing_card_file_does_not_fail_integration_setup(
+    tmp_path: Path,
+) -> None:
+    hass = fake_hass(tmp_path)
     missing = Path("/nonexistent/fitage-card.js")
     with patch("custom_components.fitage.frontend._card_path", return_value=missing):
         result = await async_setup(hass, {})
@@ -3053,8 +3150,8 @@ async def test_missing_card_file_does_not_fail_integration_setup() -> None:
 
 
 @run_async
-async def test_async_setup_registers_the_frontend_card() -> None:
-    hass = fake_hass()
+async def test_async_setup_registers_the_frontend_card(tmp_path: Path) -> None:
+    hass = fake_hass(tmp_path)
     with patch("custom_components.fitage.async_register_frontend") as register:
         register.return_value = None
         result = await async_setup(hass, {})
@@ -3063,10 +3160,12 @@ async def test_async_setup_registers_the_frontend_card() -> None:
 
 
 @run_async
-async def test_registration_never_writes_to_storage_directly() -> None:
+async def test_registration_never_writes_to_storage_directly(
+    tmp_path: Path,
+) -> None:
     """No .storage file is ever read or written by our own code; only the
     already-loaded Home Assistant collection object is used."""
-    hass, _resources = storage_lovelace_data()
+    hass, _resources = storage_lovelace_data(tmp_path)
     with patch("homeassistant.helpers.storage.Store") as store:
         await async_register_frontend(hass)
     store.assert_not_called()
