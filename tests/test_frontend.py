@@ -2052,8 +2052,8 @@ def test_all_card_metrics_keep_their_live_history_and_unit_contract() -> None:
     assert "statisticId(m) { return `${this.statisticPrefix}_${m.key}`; }" in content
 
 
-def test_bundled_card_is_version_0_6_5() -> None:
-    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.5";')
+def test_bundled_card_is_version_0_6_6() -> None:
+    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.6";')
 
 
 def test_card_version_constant_matches_the_javascript_version() -> None:
@@ -2091,7 +2091,7 @@ def test_static_url_path_matches_the_bundled_card() -> None:
 
 
 def test_module_url_is_exactly_the_expected_value() -> None:
-    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.5"
+    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.6"
 
 
 def test_default_stub_profile_shows_a_neutral_instruction_in_source() -> None:
@@ -3268,18 +3268,17 @@ async def test_older_integrated_version_is_updated_in_place(
 
 
 @run_async
-async def test_resource_updates_from_v0_6_4_to_v0_6_5(
+async def test_resource_updates_from_v0_6_5_to_v0_6_6(
     tmp_path: Path,
 ) -> None:
-    """The real-world upgrade this release ships: the previously-registered
-    v0.6.4 Lovelace resource must update in place to v0.6.5, not duplicate."""
+    """The existing v0.6.5 Lovelace resource must update in place to v0.6.6."""
     hass, resources = storage_lovelace_data(
         tmp_path,
         {
             "fitage-id": {
                 "id": "fitage-id",
                 "type": "module",
-                "url": "/fitage/fitage-card.js?v=0.6.4",
+                "url": "/fitage/fitage-card.js?v=0.6.5",
             }
         },
     )
@@ -3288,7 +3287,7 @@ async def test_resource_updates_from_v0_6_4_to_v0_6_5(
     items = resources.async_items()
     assert len(items) == 1
     assert items[0]["id"] == "fitage-id"
-    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.5"
+    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.6"
     assert items[0]["url"] == MODULE_URL
 
 
