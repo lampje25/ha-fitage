@@ -1299,6 +1299,22 @@ Object.defineProperty(GraphCard.prototype, "hass", {
   get() { return this.__hassValue; },
   set(v) { hassSetterCalls += 1; this.__hassValue = v; },
 });
+class GraphCardWithoutHassAccessor {
+  setConfig(cfg) {
+    this._config = cfg;
+    this.__lifecycle = ["configured"];
+  }
+  connectedCallback() {
+    if (!this._config) violations.push("2026.11 connectedCallback fired before setConfig");
+    if (!Object.hasOwn(this, "hass")) violations.push("2026.11 hass was not assigned before DOM connection");
+    if (!this.hass?.config) violations.push("2026.11 connectedCallback fired without hass.config");
+    this.__lifecycle.push("connected");
+  }
+  disconnectedCallback() {}
+}
+// In frontend 2026.11 the statistics graph card no longer declares hass as
+// a Lit property, so the assignment after upgrade creates an own property.
+GraphCardWithoutHassAccessor.__isLovelaceStub = true;
 function upgradeElement(el, Ctor) {
   // Verified against the real, locally installed home-assistant-frontend in
   // an actual Chromium build: upgrading an element whose "hass" was set
@@ -1497,6 +1513,9 @@ async function scenarioD_periodSwitchIsSafe() {
   if (el.graphs.get("weight") !== container.child) {
     throw new Error("scenario D: this.graphs and the DOM disagree on which generation won");
   }
+  if (container.child._config.days_to_show !== 30) {
+    throw new Error("scenario D: the latest period selection must win the race");
+  }
 }
 
 async function scenarioE_editorPreviewReconfigureIsSafe() {
@@ -1525,6 +1544,9 @@ async function scenarioE_editorPreviewReconfigureIsSafe() {
   const container = el.shadowRoot.querySelector("#graph-weight");
   if (!container.child || container.child.hass === undefined) {
     throw new Error("scenario E: editor reconfigure during an in-flight createGraphs() must still end configured");
+  }
+  if (container.child._config.entities[0] !== "fitage:ander_profiel_weight") {
+    throw new Error("scenario E: the stale profile generation must not replace the reconfigured graph");
   }
 }
 
@@ -1779,6 +1801,49 @@ async function scenarioM9_validProfileWithCurrentPrefixKeepsWorking() {
   if (!el.ready) throw new Error("scenario M9: a valid profile must reach the ready state");
 }
 
+async function scenarioN_202611OwnHassPropertyDuringFirstLazyLoad() {
+  registry.factories.delete(GRAPH_CARD_TAG);
+  const el = makeCard(oneMetric());
+  const before = createCount;
+  const build = el.createGraphs();
+  await waitForCreateCount(before + 1);
+  registry.define(GRAPH_CARD_TAG, GraphCardWithoutHassAccessor);
+  await build;
+
+  const graph = el.graphs.get("weight");
+  const container = el.shadowRoot.querySelector("#graph-weight");
+  if (!graph || container.child !== graph) {
+    throw new Error("scenario N: first lazy-loaded 2026.11 graph was not attached");
+  }
+  if (!Object.hasOwn(graph, "hass")) {
+    throw new Error("scenario N: 2026.11 graph should receive hass as an own property");
+  }
+  if (graph.hass !== el._hass || !graph.hass.config) {
+    throw new Error("scenario N: 2026.11 graph did not retain the valid hass instance");
+  }
+  if (graph.__lifecycle.join(",") !== "configured,connected") {
+    throw new Error("scenario N: configuration and hass must precede DOM connection");
+  }
+}
+
+async function scenarioO_202611OwnHassPropertyWhenGraphIsAlreadyLoaded() {
+  registry.define(GRAPH_CARD_TAG, GraphCardWithoutHassAccessor);
+  const el = makeCard(oneMetric());
+  await el.createGraphs();
+
+  const graph = el.graphs.get("weight");
+  const container = el.shadowRoot.querySelector("#graph-weight");
+  if (!graph || container.child !== graph) {
+    throw new Error("scenario O: already-loaded 2026.11 graph was not attached");
+  }
+  if (!Object.hasOwn(graph, "hass") || graph.hass !== el._hass || !graph.hass.config) {
+    throw new Error("scenario O: already-loaded graph did not retain the valid own hass property");
+  }
+  if (graph.__lifecycle.join(",") !== "configured,connected") {
+    throw new Error("scenario O: configuration and hass must precede DOM connection");
+  }
+}
+
 async function scenarioK_theOldOrderReproducesTheSameCrash() {
   // Demonstrates the exact failure this fix closes: the *old* invariant
   // (graph.hass !== this._hass) does not reject two undefined values, so a
@@ -1823,6 +1888,8 @@ async function scenarioK_theOldOrderReproducesTheSameCrash() {
   await scenarioM7_validProfileSwitchedToStubMidPrefixResolutionBuildsNothing();
   await scenarioM8_stubLaterSwitchedToValidProfileBuildsOnlyAfterward();
   await scenarioM9_validProfileWithCurrentPrefixKeepsWorking();
+  await scenarioN_202611OwnHassPropertyDuringFirstLazyLoad();
+  await scenarioO_202611OwnHassPropertyWhenGraphIsAlreadyLoaded();
   await scenarioK_theOldOrderReproducesTheSameCrash();
   if (violations.length) {
     console.error(violations.join("\n"));
@@ -1881,8 +1948,8 @@ def test_bundled_card_ships_in_the_expected_distribution_location() -> None:
     assert CARD_PATH.is_file()
 
 
-def test_bundled_card_is_version_0_6_4() -> None:
-    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.4";')
+def test_bundled_card_is_version_0_6_5() -> None:
+    assert CARD_PATH.read_text(encoding="utf-8").startswith('const VERSION = "0.6.5";')
 
 
 def test_card_version_constant_matches_the_javascript_version() -> None:
@@ -1920,7 +1987,7 @@ def test_static_url_path_matches_the_bundled_card() -> None:
 
 
 def test_module_url_is_exactly_the_expected_value() -> None:
-    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.4"
+    assert MODULE_URL == "/fitage/fitage-card.js?v=0.6.5"
 
 
 def test_default_stub_profile_shows_a_neutral_instruction_in_source() -> None:
@@ -1963,9 +2030,10 @@ def test_graph_element_is_never_connected_to_the_dom_before_it_is_configured() -
     createGraphs()/render() through a faithful simulation of Home
     Assistant's own createCardElement() lazy-loading race (see the harness
     docstring above for the exact Core-adjacent source reference) and checks
-    five scenarios: setConfig() before DOM attachment, a rerender while a
-    new generation is still loading, switching between graphs and compact,
-    rapid period switching, and an editor-preview reconfigure mid-flight."""
+    both the 2026.10 prototype-accessor and 2026.11 own-property hass models.
+    It covers first lazy loading and an already-defined card, ensures config
+    and hass are ready before DOM attachment, and exercises period changes,
+    stale-generation rejection, and editor-preview reconfiguration."""
     result = _run_node_js(_GRAPH_LIFECYCLE_JS_HARNESS)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "ALL LIFECYCLE CHECKS PASSED" in result.stdout
@@ -2897,18 +2965,18 @@ async def test_older_integrated_version_is_updated_in_place(
 
 
 @run_async
-async def test_resource_updates_from_v0_6_3_to_v0_6_4(
+async def test_resource_updates_from_v0_6_4_to_v0_6_5(
     tmp_path: Path,
 ) -> None:
     """The real-world upgrade this release ships: the previously-registered
-    v0.6.3 Lovelace resource must update in place to v0.6.4, not duplicate."""
+    v0.6.4 Lovelace resource must update in place to v0.6.5, not duplicate."""
     hass, resources = storage_lovelace_data(
         tmp_path,
         {
             "fitage-id": {
                 "id": "fitage-id",
                 "type": "module",
-                "url": "/fitage/fitage-card.js?v=0.6.3",
+                "url": "/fitage/fitage-card.js?v=0.6.4",
             }
         },
     )
@@ -2917,7 +2985,7 @@ async def test_resource_updates_from_v0_6_3_to_v0_6_4(
     items = resources.async_items()
     assert len(items) == 1
     assert items[0]["id"] == "fitage-id"
-    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.4"
+    assert items[0]["url"] == "/fitage/fitage-card.js?v=0.6.5"
     assert items[0]["url"] == MODULE_URL
 
 
